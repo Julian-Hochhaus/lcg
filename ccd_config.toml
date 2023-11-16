@@ -1,5 +1,9 @@
 initial_camera_index = 2
 initial_resolution = "1920x1080"
+brightness = 0.5
+hue = 0.5  # Example value for hue
+gain = 0.5  # Example value for gain
+exposure = 0.5  # Example value for exposure
 [resolutions]
 "640x480" = [640, 480]
 "1920x1080" = [1920, 1080]

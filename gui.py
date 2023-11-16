@@ -3,8 +3,13 @@ import tkinter as tk
 from PIL import Image, ImageTk
 import threading
 import queue
+import numpy as np
 from tkinter import ttk
 import toml
+import os
+from socket import *
+import tkinter.filedialog as filedialog
+script_directory = os.path.dirname(os.path.abspath(__file__))
 RES_OPTIONS = {
     "640x480": (640, 480),
     "1920x1080": (1920, 1080),
@@ -52,6 +57,8 @@ class CameraApp:
         self.settings_button = tk.Button(root, text="Open Settings", command=self.open_settings)
         self.settings_button.pack()
         self.resolutions = self.load_resolutions()
+        self.brightness = 200
+        self.gain = 0
         self.stream_status_label = tk.Label(root, text="Stream Status: Stopped", fg="red")
         self.stream_status_label.pack()
 
@@ -63,14 +70,106 @@ class CameraApp:
 
         self.frame_rate_label = tk.Label(root, text="Frame Rate: ")
         self.frame_rate_label.pack()
+        self.capture_button = tk.Button(root, text="Capture Single Photo", command=self.capture_photo)
+        self.capture_button.pack()
+        self.device_label = tk.Label(self.root, text="Device Control:")
+        self.device_label.pack()
+
+        self.command_label = tk.Label(self.root, text="Command:")
+        self.command_label.pack()
+
+        self.command_entry = tk.Entry(self.root)
+        self.command_entry.pack()
+
+        self.result_label = tk.Label(self.root, text="Result:")
+        self.result_label.pack()
+
+        self.send_command_button = tk.Button(self.root, text="Send Command", command=self.send_command)
+        self.send_command_button.pack()
+
+        self.select_directory_button = tk.Button(self.root, text="Select Save Directory", command=self.select_directory)
+        self.select_directory_button.pack()
+
+        # Create a button to start the image capture loop
+        self.start_capture_button = tk.Button(self.root, text="Start Image Capture Loop",
+                                              command=lambda: self.capture_images_loop())  # Example energy values
+        self.start_capture_button.pack()
+
+        # Socket configuration for the second device
+        self.server_host = '129.217.168.64'
+        self.server_port = 4004
+        self.device_socket = socket(AF_INET, SOCK_STREAM)
+        self.device_socket.connect((self.server_host, self.server_port))
         self.root.protocol("WM_DELETE_WINDOW", self.close_app)
+
+    def capture_images_loop(self):
+        for i in range (10,100, 9):
+            command = f'VEN{float(i)}\r'
+            # Send the command to the device
+            self.device_socket.send(command.encode())
+            data_set = self.device_socket.recv(256)
+            self.device_socket.send('REN\r'.encode())
+            data_read = self.device_socket.recv(256)
+            print(data_read.decode('utf-8'))
+            # Display the result in the result_label
+            self.result_label.config(text=f"Result: {data_read.decode('utf-8')}")
+            import time
+            time.sleep(1)
+            ret, frame = self.cap.read()
+            if ret:
+                file_path = self.save_directory+f'/images/EN_{i}.jpg'
+                if file_path:
+                    # Save the captured frame as an image with the user-specified filename and directory
+                    cv2.imwrite(file_path, frame)
+                    print(f"Photo captured and saved as '{file_path}'")
+                else:
+                    print("Photo capturing canceled")
+            else:
+                print("Failed to capture photo")
+
+    def select_directory(self):
+        # Allow the user to select a directory for saving images
+        self.save_directory = filedialog.askdirectory()
+        print("Save directory:", self.save_directory)
+    def send_command(self):
+        energy = self.command_entry.get()
+        command=f'VEN{float(energy)}\r'
+
+
+
+
+        # Send the command to the device
+        self.device_socket.send(command.encode())
+        data_set = self.device_socket.recv(256)
+        self.device_socket.send('REN\r'.encode())
+        data_read = self.device_socket.recv(256)
+        print(data_read.decode('utf-8'))
+        # Display the result in the result_label
+        self.result_label.config(text=f"Result: {data_read.decode('utf-8')}")
+    def capture_photo(self):
+        ret, frame = self.cap.read()
+        if ret:
+            file_path = filedialog.asksaveasfilename(defaultextension=".jpg",
+                                                     filetypes=[("JPEG files", "*.jpg"), ("All files", "*.*")],
+                                                     title="Save Photo As")
+            if file_path:
+                # Save the captured frame as an image with the user-specified filename and directory
+                cv2.imwrite(file_path, frame)
+                print(f"Photo captured and saved as '{file_path}'")
+            else:
+                print("Photo capturing canceled")
+        else:
+            print("Failed to capture photo")
 
     def load_settings(self):
         try:
-            with open('ccd_config.toml', 'r') as config_file:
+            with open(script_directory+'/ccd_config.toml', 'r') as config_file:
                 config = toml.load(config_file)
                 self.initial_camera_index = config.get('initial_camera_index')
                 self.selected_resolution.set(config.get('initial_resolution'))
+                self.brightness = config.get('brightness')
+                self.gain = config.get('gain')  # Adding gain to the settings
+
         except FileNotFoundError:
             print('Error')
             self.initial_camera_index = 0
@@ -79,26 +178,28 @@ class CameraApp:
     def load_resolutions(self):
         resolutions = {}
         try:
-            with open('ccd_config.toml', 'r') as config_file:
+            with open(script_directory+'/ccd_config.toml', 'r') as config_file:
                 config = toml.load(config_file)
-                resolutions = config.get('resolutions', {})
-        except FileNotFoundError:
-            print('Error loading resolutions')
-
+                resolutions = config.get('resolutions')
+        except FileNotFoundError as e:
+            print('Error: File not found:', e)
+        except Exception as e:
+            print('Error loading resolutions:', e)
         return resolutions
     def save_settings(self):
         config = {
             "initial_camera_index": self.initial_camera_index,
-            "initial_resolution": self.selected_resolution.get()
+            "initial_resolution": self.selected_resolution.get(),
+            "brightness": self.brightness,
+            "gain": self.gain,
         }
-        with open('ccd_config.toml', 'w') as config_file:
+        with open(script_directory+'/ccd_config.toml',  'w') as config_file:
             toml.dump(config, config_file)
 
     def video_capture_thread(self):
         while not self.stop_event.is_set():
             ret, frame = self.cap.read()
             if ret:
-                frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
                 frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
                 frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
                 frame_rate = self.cap.get(cv2.CAP_PROP_FPS)
@@ -165,6 +266,16 @@ class CameraApp:
         camera_combobox = ttk.Combobox(settings_window, values=self.available_cameras, state="readonly")
         camera_combobox.current(self.initial_camera_index)
         camera_combobox.pack()
+        tk.Label(settings_window, text="Brightness:").pack()
+        brightness_scale = tk.Scale(settings_window, from_=0, to=4095, resolution=1, orient=tk.HORIZONTAL,
+                                    command=self.set_brightness)
+        brightness_scale.set(self.brightness)
+        brightness_scale.pack()
+
+        tk.Label(settings_window, text="Gain:").pack()
+        gain_scale = tk.Scale(settings_window, from_=0, to=480, resolution=1, orient=tk.HORIZONTAL, command=self.set_gain)
+        gain_scale.set(self.gain)
+        gain_scale.pack()
 
         update_button = tk.Button(settings_window, text="Update camera", command=self.update_settings)
         update_button.pack()
@@ -176,6 +287,13 @@ class CameraApp:
         load_standard_button.pack()
 
         camera_combobox.bind("<<ComboboxSelected>>", lambda event, cb=camera_combobox: self.change_camera(cb))
+
+    def set_brightness(self, value):
+        self.brightness = float(value)
+
+    def set_gain(self, value):
+        self.gain = float(value)
+
 
     def change_camera(self, camera_combobox):
         new_camera_index = camera_combobox.current()
@@ -206,6 +324,9 @@ class CameraApp:
                 self.stream_status_label.config(text="Stream Status: Stopped", fg="red")
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, selected_width)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, selected_height)
+
+            self.cap.set(cv2.CAP_PROP_BRIGHTNESS, self.brightness)
+            self.cap.set(cv2.CAP_PROP_GAIN, self.gain)
 
             # Restart video thread with updated camera settings
             self.stop_event.set()
