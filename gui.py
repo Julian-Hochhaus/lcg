@@ -11,12 +11,7 @@ from socket import *
 import subprocess
 import tkinter.filedialog as filedialog
 script_directory = os.path.dirname(os.path.abspath(__file__))
-RES_OPTIONS = {
-    "640x480": (640, 480),
-    "1920x1080": (1920, 1080),
-    "2048x2048": (2048, 2048),
-    "3072x2048": (3072, 2048)
-}
+settings_window = None
 def list_available_cameras():
     cameras = []
     index = 0
@@ -49,11 +44,17 @@ class CameraApp:
         self.video_label.pack(side="left")
         self.last_saved_image_label = tk.Label(self.videoframes, text="Last Saved Image")
         self.last_saved_image_label.pack(side="right")
+        #initialisation of all values
         self.available_cameras = camera_list
-        self.initial_camera_index = camera_index  # Store initial camera index
+        self.camera_index = camera_index  # Store initial camera index
+        self.resolutions = self.load_resolutions()
+        self.selected_resolution='640x480'
+        self.brightness = 100
+        self.gain = 100
+        self.auto_exposure = 3
 
-        self.set_gain_to_manual(self.initial_camera_index)
-        current_gain_auto = self.get_gain_auto(self.initial_camera_index)
+        self.set_gain_to_manual(self.camera_index)
+        current_gain_auto = self.get_gain_auto(self.camera_index)
         if current_gain_auto == 0:
             print("gain set to manual mode")
         else:
@@ -76,11 +77,7 @@ class CameraApp:
         self.info_frame.pack(side='right')
         self.settings_button = tk.Button(self.settings_frame, text="Open Settings", command=self.open_settings)
         self.settings_button.pack()
-        self.resolutions = self.load_resolutions()
-        self.brightness = 200
-        self.gain = 0
-        self.auto_exposure=3
-        self.boolean_auto_exposure=True
+
         self.stream_status_label = tk.Label(self.info_frame, text="Stream Status: Stopped", fg="red")
         self.stream_status_label.pack(side="bottom")
 
@@ -117,7 +114,7 @@ class CameraApp:
                                               command=lambda: self.capture_images_loop())  # Example energy values
         self.start_capture_button.pack()
 
-        # Socket configuration for the second device
+        # Socket configuration for the LEED
         self.server_host = '129.217.168.64'
         self.server_port = 4004
         self.device_socket = socket(AF_INET, SOCK_STREAM)
@@ -219,14 +216,14 @@ class CameraApp:
         try:
             with open(script_directory+'/ccd_config.toml', 'r') as config_file:
                 config = toml.load(config_file)
-                self.initial_camera_index = config.get('CameraSettings', {}).get('initial_camera_index')
+                self.camera_index = config.get('CameraSettings', {}).get('camera_index')
                 self.selected_resolution.set(config.get('CameraSettings', {}).get('initial_resolution'))
                 self.brightness = config.get('CameraSettings', {}).get('brightness')
                 self.gain = config.get('CameraSettings', {}).get('gain')  # Adding gain to the settings
 
         except FileNotFoundError:
             print('Error')
-            self.initial_camera_index = 0
+            self.camera_index = 0
             self.selected_resolution.set("640x480")
         self.update_settings()
     def load_resolutions(self):
@@ -247,7 +244,7 @@ class CameraApp:
             config = toml.load(config_file)
 
         # Update specific settings
-        config['CameraSettings']['initial_camera_index'] = self.initial_camera_index
+        config['CameraSettings']['camera_index'] = self.camera_index
         config['CameraSettings']['brightness'] = self.brightness
         config['CameraSettings']['gain'] = self.gain
 
@@ -311,50 +308,76 @@ class CameraApp:
             self.cap.release()
         self.root.destroy()
 
+
+
     def open_settings(self):
+        global settings_window
+
+        if settings_window:
+            settings_window.lift()  # Bring settings window to front
+            return
+
         settings_window = tk.Toplevel(self.root)
         settings_window.title("Settings")
-        self.selected_resolution = tk.StringVar()
-        self.selected_resolution.set("640x480")
 
-        tk.Label(settings_window, text="Select Resolution:").pack()
-        resolution_combobox = ttk.Combobox(settings_window, textvariable=self.selected_resolution,
+        # Organize the settings window layout
+        resolution_frame = tk.Frame(settings_window)
+        resolution_frame.pack()
+        tk.Label(resolution_frame, text="Select Resolution:").pack()
+        resolution_combobox = ttk.Combobox(resolution_frame, textvariable=self.selected_resolution,
                                            values=list(self.resolutions.keys()), state="readonly")
+        if self.selected_resolution in self.resolutions:
+            resolution_combobox.set(self.selected_resolution)
         resolution_combobox.pack()
-        tk.Label(settings_window, text="Select Camera:").pack()
-        camera_combobox = ttk.Combobox(settings_window, values=self.available_cameras, state="readonly")
-        camera_combobox.current(self.initial_camera_index)
+
+        camera_frame = tk.Frame(settings_window)
+        camera_frame.pack()
+        tk.Label(camera_frame, text="Select Camera:").pack()
+        camera_combobox = ttk.Combobox(camera_frame, values=self.available_cameras, state="readonly")
+        camera_combobox.current(self.camera_index)
         camera_combobox.pack()
-        tk.Label(settings_window, text="Brightness:").pack()
-        brightness_scale = tk.Scale(settings_window, from_=0, to=4095, resolution=1, orient=tk.HORIZONTAL,
+
+        brightness_frame = tk.Frame(settings_window)
+        brightness_frame.pack()
+        tk.Label(brightness_frame, text="Brightness:").pack()
+        brightness_scale = tk.Scale(brightness_frame, from_=0, to=4095, resolution=1, orient=tk.HORIZONTAL,
                                     command=self.set_brightness)
         brightness_scale.set(self.brightness)
         brightness_scale.pack()
 
-        tk.Label(settings_window, text="Gain:").pack()
-        gain_scale = tk.Scale(settings_window, from_=0, to=480, resolution=1, orient=tk.HORIZONTAL, command=self.set_gain)
+        gain_frame = tk.Frame(settings_window)
+        gain_frame.pack()
+        tk.Label(gain_frame, text="Gain:").pack()
+        gain_scale = tk.Scale(gain_frame, from_=0, to=480, resolution=1, orient=tk.HORIZONTAL, command=self.set_gain)
         gain_scale.set(self.gain)
         gain_scale.pack()
-        exposure_time_absolute = tk.Scale(settings_window, from_=0.1, to=50, resolution=0.1, orient=tk.HORIZONTAL,
+
+        exposure_frame = tk.Frame(settings_window)
+        exposure_frame.pack()
+        exposure_time_absolute = tk.Scale(exposure_frame, from_=0.1, to=50, resolution=0.1, orient=tk.HORIZONTAL,
                                           label="Exposure Time (s)", command=self.set_exposure_time_absolute)
         exposure_time_absolute.set(333)  # Set the default value
         exposure_time_absolute.pack()
 
-        auto_exposure= tk.BooleanVar()
-        auto_exposure.set(True)  # Set the default value for gain auto checkbox
-        self.auto_exposure_checkbox = tk.Checkbutton(settings_window, text="Gain Auto", var=self.boolean_auto_exposure)
+        auto_exposure_frame = tk.Frame(settings_window)
+        auto_exposure_frame.pack()
+        self.boolean_auto_exposure = tk.BooleanVar()
+        self.boolean_auto_exposure.set(True)
+        self.auto_exposure_checkbox = tk.Checkbutton(auto_exposure_frame, text="Auto Exposure",
+                                                     var=self.boolean_auto_exposure)
         self.auto_exposure_checkbox.pack()
 
+        # Buttons
+        button_frame = tk.Frame(settings_window)
+        button_frame.pack()
+        update_button = tk.Button(button_frame, text="Update camera", command=self.update_settings)
+        update_button.pack(side=tk.LEFT)
 
+        save_button = tk.Button(button_frame, text="Save Settings to config", command=self.save_settings)
+        save_button.pack(side=tk.LEFT)
 
-        update_button = tk.Button(settings_window, text="Update camera", command=self.update_settings)
-        update_button.pack()
-
-        save_button = tk.Button(settings_window, text="Save Settings to config", command=self.save_settings)
-        save_button.pack()
-
-        load_standard_button = tk.Button(settings_window, text="Load Settings from config", command=self.load_settings)
-        load_standard_button.pack()
+        load_standard_button = tk.Button(button_frame, text="Load Settings from config", command=self.load_settings)
+        load_standard_button.pack(side=tk.LEFT)
 
         camera_combobox.bind("<<ComboboxSelected>>", lambda event, cb=camera_combobox: self.change_camera(cb))
 
@@ -391,24 +414,23 @@ class CameraApp:
 
     def change_camera(self, camera_combobox):
         new_camera_index = camera_combobox.current()
-        if new_camera_index != self.initial_camera_index:
-            self.initial_camera_index = new_camera_index
-            self.set_gain_to_manual(self.initial_camera_index)
+        if new_camera_index != self.camera_index:
+            self.camera_index = new_camera_index
+            self.set_gain_to_manual(self.camera_index)
             self.update_settings()  # Apply the new camera settings
     def update_settings(self):
-        selected_resolution = self.selected_resolution.get()
-        selected_width, selected_height = RES_OPTIONS[selected_resolution]
+        selected_width, selected_height = self.resolutions[self.selected_resolution]
         try:
 
             if self.cap.isOpened():
                 self.cap.release()
-            self.set_gain_to_manual(self.initial_camera_index)
-            current_gain_auto = self.get_gain_auto(self.initial_camera_index)
+            self.set_gain_to_manual(self.camera_index)
+            current_gain_auto = self.get_gain_auto(self.camera_index)
             if current_gain_auto == 0:
                 print("gain in in manual mode")
             else:
                 print("gain is not in manual mode, please check/adapt with terminal or TCam")
-            self.cap = cv2.VideoCapture(self.initial_camera_index, cv2.CAP_V4L2)  # Use initial camera index
+            self.cap = cv2.VideoCapture(self.camera_index, cv2.CAP_V4L2)  # Use initial camera index
             ret, frame = self.cap.read()
             if ret:
                 frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -428,12 +450,9 @@ class CameraApp:
             self.cap.set(cv2.CAP_PROP_BRIGHTNESS, self.brightness)
             self.cap.set(cv2.CAP_PROP_GAIN, self.gain)
             self.cap.set(cv2.CAP_PROP_EXPOSURE, self.exposure_time_absolute)
-            if not self.boolean_auto_exposure:
-                self.auto_exposure = 1
-            else:
-                self.auto_exposure = 3
-            self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
-
+            auto_exposure_value = 1 if not self.boolean_auto_exposure.get() else 3
+            self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, auto_exposure_value)
+            print(self.cap.get(cv2.CAP_PROP_AUTO_EXPOSURE), self.boolean_auto_exposure.get())
             # Restart video thread with updated camera settings
             self.stop_event.set()
             self.video_thread.join()

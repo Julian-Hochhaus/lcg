@@ -1,10 +1,11 @@
 [CameraSettings]
-initial_camera_index = 2
+camera_index = 2
 initial_resolution = "2048x2048"
 brightness = 0.5
-hue = 0.5
+gain_auto = false
 gain = 0.5
-exposure = 0.5
+exposure_auto = false
+exposure_time = 0.5
 
 [CameraSettings.resolutions]
 "640x480" = [640, 480]
