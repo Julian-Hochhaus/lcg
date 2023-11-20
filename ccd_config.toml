@@ -1,19 +1,18 @@
 [CameraSettings]
 camera_index = 2
 initial_resolution = "2048x2048"
-brightness = 0.5
+brightness = 0
 gain_auto = false
-gain = 0.5
+gain = 219.0
 exposure_auto = false
-exposure_time = 0.5
-
-[CameraSettings.resolutions]
-"640x480" = [640, 480]
-"1920x1080" = [1920, 1080]
-"2048x2048" = [2048, 2048]
-"3072x2048" = [3072, 2048]
+exposure_time = 1
 
 [LEED]
-server_host = '129.217.168.64'
+server_host = "129.217.168.64"
 server_port = 4004
 
+[CameraSettings.resolutions]
+640x480 = [ 640, 480,]
+1920x1080 = [ 1920, 1080,]
+2048x2048 = [ 2048, 2048,]
+3072x2048 = [ 3072, 2048,]

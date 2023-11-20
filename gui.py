@@ -51,17 +51,18 @@ class CameraApp:
         self.selected_resolution='640x480'
         self.brightness = 100
         self.gain = 100
-        self.auto_exposure = 3
+        self.exposure_time=0.5
+        self.boolean_auto_exposure = tk.BooleanVar()
+        self.auto_exposure_value = 1
+        self.boolean_auto_gain = tk.BooleanVar()
+        self.auto_gain_value=0
+        self.set_exposure_time_absolute(self.exposure_time)
 
-        self.set_gain_to_manual(self.camera_index)
-        current_gain_auto = self.get_gain_auto(self.camera_index)
-        if current_gain_auto == 0:
-            print("gain set to manual mode")
-        else:
-            print("gain is not in manual mode, please check/adapt with terminal or TCam")
+        self.set_auto_gain(self.camera_index, self.auto_gain_value)
+        self.load_settings()
         self.cap = cv2.VideoCapture(camera_index, cv2.CAP_V4L2)
+
         self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"FFV1"))
-        print("format",self.cap.get(cv2.CAP_PROP_FOURCC))
         self.q = queue.Queue()
         self.stop_event = threading.Event()
 
@@ -217,15 +218,27 @@ class CameraApp:
             with open(script_directory+'/ccd_config.toml', 'r') as config_file:
                 config = toml.load(config_file)
                 self.camera_index = config.get('CameraSettings', {}).get('camera_index')
-                self.selected_resolution.set(config.get('CameraSettings', {}).get('initial_resolution'))
+                self.selected_resolution=config.get('CameraSettings', {}).get('initial_resolution')
                 self.brightness = config.get('CameraSettings', {}).get('brightness')
-                self.gain = config.get('CameraSettings', {}).get('gain')  # Adding gain to the settings
+                self.gain = config.get('CameraSettings', {}).get('gain')
+                self.auto_gain_value =0 if not config.get('CameraSettings', {}).get('gain_auto') else 1
+                self.boolean_auto_gain.set(True) if config.get('CameraSettings', {}).get('gain_auto') else self.boolean_auto_gain.set(False)
+                self.auto_exposure_value = 1 if not config.get('CameraSettings', {}).get('exposure_auto') else 3
+                self.boolean_auto_exposure.set(True) if config.get('CameraSettings', {}).get('exposure_auto') else self.boolean_auto_exposure.set(False)
+
+                print(self.auto_exposure_value)
+                self.exposure_time=config.get('CameraSettings', {}).get('exposure_time')
 
         except FileNotFoundError:
             print('Error')
             self.camera_index = 0
             self.selected_resolution.set("640x480")
-        self.update_settings()
+            self.brightness = 100
+            self.gain = 100
+            self.auto_gain_value = 0
+            self.auto_exposure_value = 1
+            self.exposure_time = 1
+
     def load_resolutions(self):
         resolutions = {}
         try:
@@ -245,9 +258,12 @@ class CameraApp:
 
         # Update specific settings
         config['CameraSettings']['camera_index'] = self.camera_index
+        config['CameraSettings']['initial_resolution'] = self.selected_resolution
         config['CameraSettings']['brightness'] = self.brightness
         config['CameraSettings']['gain'] = self.gain
-
+        config['CameraSettings']['gain_auto'] = self.boolean_auto_gain.get()
+        config['CameraSettings']['exposure_time'] = self.exposure_time
+        config['CameraSettings']['exposure_auto'] = self.boolean_auto_exposure.get()
         # Rewrite the updated settings back to the file
         with open(script_directory+'/ccd_config.toml', 'w') as config_file:
             toml.dump(config, config_file)
@@ -356,7 +372,7 @@ class CameraApp:
         exposure_frame.pack()
         exposure_time_absolute = tk.Scale(exposure_frame, from_=0.1, to=50, resolution=0.1, orient=tk.HORIZONTAL,
                                           label="Exposure Time (s)", command=self.set_exposure_time_absolute)
-        exposure_time_absolute.set(333)  # Set the default value
+        exposure_time_absolute.set(self.exposure_time)  # Set the default value
         exposure_time_absolute.pack()
 
         auto_exposure_frame = tk.Frame(settings_window)
@@ -366,6 +382,13 @@ class CameraApp:
         self.auto_exposure_checkbox = tk.Checkbutton(auto_exposure_frame, text="Auto Exposure",
                                                      var=self.boolean_auto_exposure)
         self.auto_exposure_checkbox.pack()
+        auto_gain_frame = tk.Frame(settings_window)
+        auto_gain_frame.pack()
+
+        self.boolean_auto_gain.set(True)
+        self.auto_gain_checkbox = tk.Checkbutton(auto_gain_frame, text="Auto Gain",
+                                                     var=self.boolean_auto_gain)
+        self.auto_gain_checkbox.pack()
 
         # Buttons
         button_frame = tk.Frame(settings_window)
@@ -376,11 +399,14 @@ class CameraApp:
         save_button = tk.Button(button_frame, text="Save Settings to config", command=self.save_settings)
         save_button.pack(side=tk.LEFT)
 
-        load_standard_button = tk.Button(button_frame, text="Load Settings from config", command=self.load_settings)
+        load_standard_button = tk.Button(button_frame, text="Load Settings from config", command=self.clicked_load_settings)
         load_standard_button.pack(side=tk.LEFT)
 
         camera_combobox.bind("<<ComboboxSelected>>", lambda event, cb=camera_combobox: self.change_camera(cb))
 
+    def clicked_load_settings(self):
+        self.load_settings()
+        self.update_settings()
     def set_brightness(self, value):
         self.brightness = float(value)
 
@@ -392,13 +418,14 @@ class CameraApp:
         self.gain = float(value)
 
     # Function to set gain_auto using subprocess
-    def set_gain_to_manual(self, camera_index):
+    def set_auto_gain(self, camera_index, auto_gain_value):
         try:
             device='/dev/video'+str(camera_index)
-            subprocess.run(['v4l2-ctl', '--device', device, '--set-ctrl=gain_auto=0'])
-            print("gain_auto set to 0 successfully.")
+            value= '--set-ctrl=gain_auto='+str(auto_gain_value)
+            subprocess.run(['v4l2-ctl', '--device', device, value])
+            #print("gain_auto set to {} successfully.".format(auto_gain_value))
         except subprocess.CalledProcessError as e:
-            print(f"Error setting gain to manual: {e}")
+            print(f"Error setting gain to {auto_gain_value}: {e}")
 
     # Function to get gain_auto using subprocess
     def get_gain_auto(self, camera_index):
@@ -416,7 +443,7 @@ class CameraApp:
         new_camera_index = camera_combobox.current()
         if new_camera_index != self.camera_index:
             self.camera_index = new_camera_index
-            self.set_gain_to_manual(self.camera_index)
+            self.set_auto_gain(self.camera_index, self.auto_gain_value)
             self.update_settings()  # Apply the new camera settings
     def update_settings(self):
         selected_width, selected_height = self.resolutions[self.selected_resolution]
@@ -424,12 +451,7 @@ class CameraApp:
 
             if self.cap.isOpened():
                 self.cap.release()
-            self.set_gain_to_manual(self.camera_index)
-            current_gain_auto = self.get_gain_auto(self.camera_index)
-            if current_gain_auto == 0:
-                print("gain in in manual mode")
-            else:
-                print("gain is not in manual mode, please check/adapt with terminal or TCam")
+            self.set_auto_gain(self.camera_index, self.auto_gain_value)
             self.cap = cv2.VideoCapture(self.camera_index, cv2.CAP_V4L2)  # Use initial camera index
             ret, frame = self.cap.read()
             if ret:
@@ -450,8 +472,8 @@ class CameraApp:
             self.cap.set(cv2.CAP_PROP_BRIGHTNESS, self.brightness)
             self.cap.set(cv2.CAP_PROP_GAIN, self.gain)
             self.cap.set(cv2.CAP_PROP_EXPOSURE, self.exposure_time_absolute)
-            auto_exposure_value = 1 if not self.boolean_auto_exposure.get() else 3
-            self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, auto_exposure_value)
+            self.auto_exposure_value = 1 if not self.boolean_auto_exposure.get() else 3
+            self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, self.auto_exposure_value)
             print(self.cap.get(cv2.CAP_PROP_AUTO_EXPOSURE), self.boolean_auto_exposure.get())
             # Restart video thread with updated camera settings
             self.stop_event.set()
