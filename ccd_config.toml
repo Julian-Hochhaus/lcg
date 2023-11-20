@@ -1,11 +1,18 @@
+[CameraSettings]
 initial_camera_index = 2
-initial_resolution = "1920x1080"
+initial_resolution = "2048x2048"
 brightness = 0.5
-hue = 0.5  # Example value for hue
-gain = 0.5  # Example value for gain
-exposure = 0.5  # Example value for exposure
-[resolutions]
+hue = 0.5
+gain = 0.5
+exposure = 0.5
+
+[CameraSettings.resolutions]
 "640x480" = [640, 480]
 "1920x1080" = [1920, 1080]
 "2048x2048" = [2048, 2048]
 "3072x2048" = [3072, 2048]
+
+[LEED]
+server_host = '129.217.168.64'
+server_port = 4004
+
