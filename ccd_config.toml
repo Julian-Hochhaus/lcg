@@ -7,7 +7,7 @@ gain = 219.0
 exposure_auto = false
 exposure_time = 1
 
-[LEED]
+[LEEDSettings]
 server_host = "129.217.168.64"
 server_port = 4004
 
