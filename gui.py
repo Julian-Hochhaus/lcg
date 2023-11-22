@@ -119,7 +119,7 @@ class LCGApp:
         self.device_label = tk.Label(self.settings_frame, text="Device Control:")
         self.device_label.pack()
 
-        self.command_label = tk.Label(self.settings_frame, text="Command:")
+        self.command_label = tk.Label(self.settings_frame, text="Energy:")
         self.command_label.pack()
 
         self.command_entry = tk.Entry(self.settings_frame)
@@ -141,7 +141,10 @@ class LCGApp:
 
         # Socket configuration for the LEED
         self.leed_device=LEEDDevice(leed_host='129.217.168.64', leed_port=4004)
+        self.leed_device.send_energy(37)
         self.load_leed_settings()
+        self.leed_device.send_energy(23)
+
         self.root.protocol("WM_DELETE_WINDOW", self.close_app)
 
     def display_last_saved_image(self, frame):
@@ -273,13 +276,13 @@ class LCGApp:
         try:
             with open(script_directory+'/ccd_config.toml', 'r') as config_file:
                 config = toml.load(config_file)
-                leed_server_host=config.get('LEEDSettings',{}).get('server_host')
-                leed_server_port = config.get('LEEDSettings', {}).get('server_port')
+                host=config.get('LEEDSettings',{}).get('server_host')
+                port = config.get('LEEDSettings', {}).get('server_port')
         except FileNotFoundError:
-            leed_server_host = "129.217.168.64"
-            leed_server_port = 4004
-        self.leed_server_host_text.set(leed_server_host)
-        self.leed_server_port_text.set(leed_server_port)
+            host = "129.217.168.64"
+            port = 4004
+        self.leed_server_host_text.set(host)
+        self.leed_server_port_text.set(port)
     def save_leed_settings(self):
         with open(script_directory+'/ccd_config.toml', 'r') as config_file:
             config = toml.load(config_file)
@@ -464,21 +467,26 @@ class LCGApp:
         self.leed_server_port_entry.pack()
         self.leed_server_host_entry.bind("<FocusOut>", self.validate_leed_ip)
         self.leed_server_port_text.trace("w", self.on_leed_server_port_change)
-        leed_test_frame=tk.Frame(leed_settings_frame, bd=2, bg='gray95')
+        leed_test_frame=tk.Frame(leed_settings_frame, bd=2, bg='grey85',highlightthickness=1, highlightbackground="black")
         leed_test_frame.pack()
-        label = tk.Label(leed_test_frame, text='Command:')
+        leed_command_frame=tk.Frame(leed_test_frame)
+        leed_command_frame.pack()
+        label = tk.Label(leed_command_frame, text='Command:(Format: CMD)\n*don\'t include \\r!*')
         label.pack(side=tk.LEFT)
 
-        entry_test_command = tk.Entry(leed_test_frame)
-        entry_test_command.pack(side=tk.LEFT)
+        self.entry_test_command = tk.Entry(leed_command_frame)
+        self.entry_test_command.pack(side=tk.LEFT)
 
-        test_command_button = tk.Button(leed_test_frame, text="Send command")
+        test_command_button = tk.Button(leed_command_frame, text="Send command", command=self.send_cmd_leed)
         test_command_button.pack(side=tk.LEFT)
-
+        leed_test_output=tk.Frame(leed_test_frame)
+        leed_test_output.pack()
+        output_leed_label = tk.Label(leed_test_output, text="Output:")
+        output_leed_label.pack()
+        self.output_leed = tk.Label(leed_test_output, text="")
+        self.output_leed.pack()
         leed_button_frame = tk.Frame(leed_settings_frame)
         leed_button_frame.pack()
-        leed_command_button = tk.Button(leed_button_frame, text="Set energy", command=self.set_energy)
-        leed_command_button.pack(side=tk.LEFT)
         leed_save_button = tk.Button(leed_button_frame, text="Save LEED Settings\n to config",
                                      command=self.save_leed_settings)
         leed_save_button.pack(side=tk.LEFT)
@@ -487,6 +495,10 @@ class LCGApp:
         load_leed_button.pack(side=tk.LEFT)
 
         settings_window.protocol("WM_DELETE_WINDOW", lambda: self.on_settings_window_close())
+    def send_cmd_leed(self):
+        cmd = f'{str(self.entry_test_command.get())}\r'
+        result = self.leed_device.send_command(command=cmd)
+        self.output_leed.config(text=result)
 
     def on_leed_server_port_change(self, *args):
         self.validate_leed_ip()
@@ -494,7 +506,8 @@ class LCGApp:
         ip_address = self.leed_server_host_entry.get()
         self.leed_device.validate_leed_ip(ip_address=ip_address)
         if self.leed_device.valid_ip:
-            self.leed_device.change_ip_address(new_ip=ip_address)
+            if not self.leed_device.leed_host==ip_address:
+                self.leed_device.change_ip_address(new_ip=ip_address)
             self.validity_label.config(text="Valid IP", fg="green")
         else:
             self.validity_label.config(text="Invalid IP", fg="red")
