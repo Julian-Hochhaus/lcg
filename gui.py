@@ -1,5 +1,6 @@
 import cv2
 import tkinter as tk
+from tkinter import ttk
 from PIL import Image, ImageTk
 import threading
 import queue
@@ -7,6 +8,7 @@ import numpy as np
 from tkinter import ttk
 import toml
 import os
+import re
 from socket import *
 import subprocess
 import tkinter.filedialog as filedialog
@@ -37,13 +39,10 @@ class CameraApp:
         self.root = root
         self.root.title("Camera GUI")
         self.root.geometry("1300x900")
-        self.root.maxsize(width=1300, height=900)
-        self.videoframes=tk.Frame(root, borderwidth=5, height=490, width=1290)
-        self.videoframes.pack(side='top')
-        self.video_label = tk.Label(self.videoframes, text="Livefeed")
-        self.video_label.pack(side="left")
-        self.last_saved_image_label = tk.Label(self.videoframes, text="Last Saved Image")
-        self.last_saved_image_label.pack(side="right")
+        self.root.maxsize(width=1400, height=900)
+
+
+        #self.last_saved_image_label.pack(side="right")
         #initialisation of all values
         self.available_cameras = camera_list
         self.camera_index = camera_index  # Store initial camera index
@@ -57,8 +56,31 @@ class CameraApp:
         self.boolean_auto_gain = tk.BooleanVar()
         self.auto_gain_value=0
         self.set_exposure_time_absolute(self.exposure_time)
-
+        self.initialize_settings_frame()
         self.set_auto_gain(self.camera_index, self.auto_gain_value)
+
+        self.videoframes = tk.Canvas(root, width=1380, height=540)
+        self.videoframes.pack(side='top')
+        self.videoframes.update()
+        # Place the live stream and last saved image on the Canvas
+        self.video_label = tk.Label(self.videoframes, text="Livefeed")
+
+
+
+        self.livefeed_window=self.videoframes.create_window(self.videoframes.winfo_width()//4, self.videoframes.winfo_height()/2, window=self.video_label, anchor=tk.CENTER)
+        x1, y1, _, _ = self.videoframes.bbox(self.livefeed_window)
+        self.videoframes.create_rectangle(x1 +self.video_label.winfo_reqwidth()// 2- 320,
+                                          y1+self.video_label.winfo_reqheight()// 2 - 240,
+                                          x1+self.video_label.winfo_reqwidth()// 2 + 320,
+                                          y1+self.video_label.winfo_reqheight()// 2 + 240,fill="grey95", outline="black")
+        self.last_saved_image_label = tk.Label(self.videoframes, text="Last Saved Image")
+        self.last_saved_image_label_window=self.videoframes.create_window(self.videoframes.winfo_width()*3//4, self.videoframes.winfo_height()/2, window=self.last_saved_image_label,  anchor=tk.CENTER)
+        x2, y2, _, _ = self.videoframes.bbox(self.last_saved_image_label_window)
+        self.videoframes.create_rectangle(x2 +self.last_saved_image_label.winfo_reqwidth()// 2- 320,
+                                          y2+self.last_saved_image_label.winfo_reqheight()// 2 - 240,
+                                          x2+self.last_saved_image_label.winfo_reqwidth()// 2 + 320,
+                                          y2+self.last_saved_image_label.winfo_reqheight()// 2 + 240,fill="grey95", outline="black")
+
         self.load_camera_settings()
         self.cap = cv2.VideoCapture(camera_index, cv2.CAP_V4L2)
 
@@ -72,15 +94,12 @@ class CameraApp:
 
         self.bottom_frame = tk.Frame(root, borderwidth=5)
         self.bottom_frame.pack(side='bottom')
-        self.settings_frame = tk.Frame(self.bottom_frame, borderwidth=5)
+        self.settings_frame = tk.Frame(self.bottom_frame,bd=2, relief=tk.RIDGE)
         self.settings_frame.pack(side='left')
-        self.info_frame = tk.Frame(self.bottom_frame, borderwidth=5)
-        self.info_frame.pack(side='right')
-        self.settings_button = tk.Button(self.settings_frame, text="Open Settings", command=self.open_settings)
-        self.settings_button.pack()
-
+        self.info_frame = tk.Frame(self.bottom_frame, bd=2, relief=tk.RIDGE)
+        self.info_frame.pack(side="left")
         self.stream_status_label = tk.Label(self.info_frame, text="Stream Status: Stopped", fg="red")
-        self.stream_status_label.pack(side="bottom")
+        self.stream_status_label.pack(side="top", pady=5)
 
         self.frame_width_label = tk.Label(self.info_frame, text="Frame Width: ")
         self.frame_width_label.pack()
@@ -90,6 +109,9 @@ class CameraApp:
 
         self.frame_rate_label = tk.Label(self.info_frame, text="Frame Rate: ")
         self.frame_rate_label.pack()
+        self.settings_button = tk.Button(self.settings_frame, text="Open Settings", command=self.open_settings)
+        self.settings_button.pack()
+
         self.capture_button = tk.Button(self.settings_frame, text="Capture Single Photo", command=self.capture_photo)
         self.capture_button.pack()
         self.device_label = tk.Label(self.settings_frame, text="Device Control:")
@@ -120,7 +142,7 @@ class CameraApp:
         self.leed_server_port = 4004
         self.device_socket = socket(AF_INET, SOCK_STREAM)
         self.device_socket.connect((self.leed_server_host, self.leed_server_port))
-
+        self.leed_valid_ip = False
 
         self.root.protocol("WM_DELETE_WINDOW", self.close_app)
 
@@ -225,8 +247,6 @@ class CameraApp:
                 self.boolean_auto_gain.set(True) if config.get('CameraSettings', {}).get('gain_auto') else self.boolean_auto_gain.set(False)
                 self.auto_exposure_value = 1 if not config.get('CameraSettings', {}).get('exposure_auto') else 3
                 self.boolean_auto_exposure.set(True) if config.get('CameraSettings', {}).get('exposure_auto') else self.boolean_auto_exposure.set(False)
-
-                print(self.auto_exposure_value)
                 self.exposure_time=config.get('CameraSettings', {}).get('exposure_time')
 
         except FileNotFoundError:
@@ -238,6 +258,7 @@ class CameraApp:
             self.auto_gain_value = 0
             self.auto_exposure_value = 1
             self.exposure_time = 1
+        self.update_settings_camera_ui()
 
     def load_resolutions(self):
         resolutions = {}
@@ -277,6 +298,8 @@ class CameraApp:
         except FileNotFoundError:
             self.leed_server_host = "129.217.168.64"
             self.leed_server_port = 4004
+        print(self.leed_server_port)
+        self.update_settings_leed_ui()
     def save_leed_settings(self):
         with open(script_directory+'/ccd_config.toml', 'r') as config_file:
             config = toml.load(config_file)
@@ -344,54 +367,68 @@ class CameraApp:
         global settings_window
 
         if settings_window:
+            settings_window.deiconify()
+            settings_window.lift()
+        else:
+            self.initialize_settings_frame()
+
+    def on_settings_window_close(self):
+        global settings_window
+        settings_window.withdraw()  # Hide the window instead of closing it
+    def initialize_settings_frame(self):
+        global settings_window
+
+        if settings_window:
             settings_window.lift()
             return
 
         settings_window = tk.Toplevel(self.root, bg='grey80', width=500)
         settings_window.title("Settings")
+        settings_window.withdraw()
 
-        settings_camera=tk.Frame(settings_window, bd=2, relief=tk.RIDGE, bg='grey85')
+        settings_camera = tk.Frame(settings_window, bd=2, relief=tk.RIDGE, bg='grey85')
         settings_camera.pack(padx=10, pady=10)
         tk.Label(settings_camera, text="Camera Settings", font=('Arial', 12, 'bold')).pack()
-        settings_camera.pack()
+
         camera_frame = tk.Frame(settings_camera)
         camera_frame.pack()
         tk.Label(camera_frame, text="Select Camera:").pack()
-        camera_combobox = ttk.Combobox(camera_frame, values=self.available_cameras, state="readonly")
-        camera_combobox.current(self.camera_index)
-        camera_combobox.pack()
+        self.camera_combobox = ttk.Combobox(camera_frame, values=self.available_cameras, state="readonly")
+        self.camera_combobox.current(self.camera_index)
+        self.camera_combobox.pack()
+
         resolution_frame = tk.Frame(settings_camera)
         resolution_frame.pack()
         tk.Label(resolution_frame, text="Select Resolution:").pack()
-        resolution_combobox = ttk.Combobox(resolution_frame, textvariable=self.selected_resolution,
-                                           values=list(self.resolutions.keys()), state="readonly")
+        self.resolution_combobox = ttk.Combobox(resolution_frame, textvariable=self.selected_resolution,
+                                                values=list(self.resolutions.keys()), state="readonly")
         if self.selected_resolution in self.resolutions:
-            resolution_combobox.set(self.selected_resolution)
-        resolution_combobox.pack()
-
-
+            self.resolution_combobox.set(self.selected_resolution)
+        self.resolution_combobox.pack()
 
         brightness_frame = tk.Frame(settings_camera)
         brightness_frame.pack()
         tk.Label(brightness_frame, text="Brightness:").pack()
-        brightness_scale = tk.Scale(brightness_frame, from_=0, to=4095, resolution=1, orient=tk.HORIZONTAL,
-                                    command=self.set_brightness)
-        brightness_scale.set(self.brightness)
-        brightness_scale.pack()
+        self.brightness_scale = tk.Scale(brightness_frame, from_=0, to=4095, resolution=1, orient=tk.HORIZONTAL,
+                                         command=self.set_brightness)
+        self.brightness_scale.set(self.brightness)
+        self.brightness_scale.pack()
 
         gain_frame = tk.Frame(settings_camera)
         gain_frame.pack()
         tk.Label(gain_frame, text="Gain:").pack()
-        gain_scale = tk.Scale(gain_frame, from_=0, to=480, resolution=1, orient=tk.HORIZONTAL, command=self.set_gain)
-        gain_scale.set(self.gain)
-        gain_scale.pack()
+        self.gain_scale = tk.Scale(gain_frame, from_=0, to=480, resolution=1, orient=tk.HORIZONTAL,
+                                   command=self.set_gain)
+        self.gain_scale.set(self.gain)
+        self.gain_scale.pack()
 
         exposure_frame = tk.Frame(settings_camera)
         exposure_frame.pack()
-        exposure_time_absolute = tk.Scale(exposure_frame, from_=0.1, to=50, resolution=0.1, orient=tk.HORIZONTAL,
-                                          label="Exposure Time (s)",length=150, command=self.set_exposure_time_absolute)
-        exposure_time_absolute.set(self.exposure_time)  # Set the default value
-        exposure_time_absolute.pack()
+        self.exposure_time_entry = tk.Scale(exposure_frame, from_=0.1, to=50, resolution=0.1, orient=tk.HORIZONTAL,
+                                            label="Exposure Time (s)", length=150,
+                                            command=self.set_exposure_time_absolute)
+        self.exposure_time_entry.set(self.exposure_time)  # Set the default value
+        self.exposure_time_entry.pack()
 
         auto_exposure_frame = tk.Frame(settings_camera)
         auto_exposure_frame.pack()
@@ -400,60 +437,77 @@ class CameraApp:
         self.auto_exposure_checkbox = tk.Checkbutton(auto_exposure_frame, text="Auto Exposure",
                                                      var=self.boolean_auto_exposure)
         self.auto_exposure_checkbox.pack()
+
         auto_gain_frame = tk.Frame(settings_camera)
         auto_gain_frame.pack()
-
         self.boolean_auto_gain.set(True)
         self.auto_gain_checkbox = tk.Checkbutton(auto_gain_frame, text="Auto Gain",
-                                                     var=self.boolean_auto_gain)
+                                                 var=self.boolean_auto_gain)
         self.auto_gain_checkbox.pack()
+
         # Buttons
         button_frame = tk.Frame(settings_camera)
         button_frame.pack()
         update_button = tk.Button(button_frame, text="Update camera", command=self.update_settings)
         update_button.pack(side=tk.LEFT)
 
-        save_button = tk.Button(button_frame, text="Save Camera Settings\n to config", command=self.save_camera_settings)
+        save_button = tk.Button(button_frame, text="Save Camera Settings\n to config",
+                                command=self.save_camera_settings)
         save_button.pack(side=tk.LEFT)
 
-        load_standard_button = tk.Button(button_frame, text="Load Camera Settings\n from config", command=self.clicked_load_settings)
+        load_standard_button = tk.Button(button_frame, text="Load Camera Settings\n from config",
+                                         command=self.clicked_load_settings)
         load_standard_button.pack(side=tk.LEFT)
 
-        camera_combobox.bind("<<ComboboxSelected>>", lambda event, cb=camera_combobox: self.change_camera(cb))
+        self.camera_combobox.bind("<<ComboboxSelected>>", lambda event, cb=self.camera_combobox: self.change_camera(cb))
 
-        leed_settings_frame = tk.Frame(settings_window,bd=2, relief=tk.RIDGE, bg='grey85')
+        leed_settings_frame = tk.Frame(settings_window, bd=2, relief=tk.RIDGE, bg='grey85')
         leed_settings_frame.pack()
 
         tk.Label(leed_settings_frame, text="LEED Settings", font=('Arial', 12, 'bold')).pack()
 
-        tk.Label(leed_settings_frame, text="Server Host:").pack()
-        self.leed_server_host_entry = tk.Entry(leed_settings_frame)
-        self.leed_server_host_entry.pack()
+        server_host_frame = tk.Frame(leed_settings_frame)
+        server_host_frame.pack()
+        self.leed_server_host_text = tk.StringVar()
+
+        tk.Label(server_host_frame, text="Server Host:").pack(side="left")
+        self.leed_server_host_entry = tk.Entry(server_host_frame, textvariable=self.leed_server_host_text)
+        self.leed_server_host_entry.pack(side="left")
+        self.validity_label = tk.Label(server_host_frame, text="Invalid IP", fg="red", font=("Arial", 11))
+        self.validity_label.pack(side="left")
+        self.leed_server_port_text = tk.StringVar()
 
         tk.Label(leed_settings_frame, text="Server Port:").pack()
-        self.leed_server_port_entry = tk.Entry(leed_settings_frame)
+        self.leed_server_port_entry = tk.Entry(leed_settings_frame, textvariable=self.leed_server_port_text)
         self.leed_server_port_entry.pack()
-
-        leed_button_frame=tk.Frame(leed_settings_frame)
+        self.leed_server_host_entry.bind("<FocusOut>", self.validate_leed_ip)
+        self.leed_server_port_text.trace("w", self.on_leed_server_port_change)
+        leed_button_frame = tk.Frame(leed_settings_frame)
         leed_button_frame.pack()
         leed_command_button = tk.Button(leed_button_frame, text="Send command", command=self.send_command)
         leed_command_button.pack(side=tk.LEFT)
-        leed_save_button = tk.Button(leed_button_frame, text="Save LEED Settings\n to config", command=self.save_leed_settings)
+        leed_save_button = tk.Button(leed_button_frame, text="Save LEED Settings\n to config",
+                                     command=self.save_leed_settings)
         leed_save_button.pack(side=tk.LEFT)
-        load_leed_button = tk.Button(leed_button_frame, text="Load LEED Settings\n from config", command=self.load_leed_settings)
+        load_leed_button = tk.Button(leed_button_frame, text="Load LEED Settings\n from config",
+                                     command=self.load_leed_settings)
         load_leed_button.pack(side=tk.LEFT)
+
         settings_window.protocol("WM_DELETE_WINDOW", lambda: self.on_settings_window_close())
 
-    def on_settings_window_close(self):
-        global settings_window
-        settings_window.destroy()
-        settings_window = None
-    def get_ip(self):
-        ip_address = self.ip_entry.get()
+    def on_leed_server_port_change(self, *args):
+        # Call your validation function here
+        self.validate_leed_ip()
+
+    # Assuming self.leed_server_port_text is a StringVar linked to an Entry widget
+    def validate_leed_ip(self, *args):
+        ip_address = self.leed_server_host_entry.get()
         if self.is_valid_ip(ip_address):
-            print(f"Valid IP: {ip_address}")
+            self.leed_valid_ip=True
+            self.validity_label.config(text="Valid IP", fg='green')
         else:
-            print("Invalid IP address format")
+            self.leed_valid_ip=False
+            self.validity_label.config(text="Invalid IP", fg="red")
 
     def is_valid_ip(self, ip):
         ip_regex = r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$"
@@ -540,8 +594,19 @@ class CameraApp:
 
         except ValueError:
             print("Please enter valid integers for width and height.")
+    def update_settings_leed_ui(self):
+        self.leed_server_host_text.set(self.leed_server_host)
+        self.leed_server_port_text.set(self.leed_server_port)
+    def update_settings_camera_ui(self):
+        self.camera_combobox.current(self.camera_index)
+        if self.selected_resolution in self.resolutions:
+            self.resolution_combobox.set(self.selected_resolution)
 
-
+        self.brightness_scale.set(self.brightness)
+        self.gain_scale.set(self.gain)
+        self.exposure_time_entry.set(self.exposure_time)
+        self.boolean_auto_gain.set(True) if self.auto_gain_value==1 else self.boolean_auto_gain.set(False)
+        self.boolean_auto_exposure.set(True) if self.auto_exposure_value == 3 else self.boolean_auto_exposure.set(False)
 def main():
     try:
         cameras = list_available_cameras()
