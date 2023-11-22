@@ -1,6 +1,7 @@
 import cv2
+from camera_device import CameraDevice
+from leed_device import LEEDDevice
 import tkinter as tk
-from tkinter import ttk
 from PIL import Image, ImageTk
 import threading
 import queue
@@ -33,6 +34,7 @@ def list_available_cameras():
         for camera in cameras:
             print(camera)
     return cameras
+
 
 class CameraApp:
     def __init__(self, root, camera_index, camera_list):
@@ -138,11 +140,8 @@ class CameraApp:
         self.start_capture_button.pack()
 
         # Socket configuration for the LEED
-        self.leed_server_host = '129.217.168.64'
-        self.leed_server_port = 4004
-        self.device_socket = socket(AF_INET, SOCK_STREAM)
-        self.device_socket.connect((self.leed_server_host, self.leed_server_port))
-        self.leed_valid_ip = False
+        self.leed_device=LEEDDevice(leed_host='129.217.168.64', leed_port=4004)
+        print(self.leed_device.connection_established)
 
         self.root.protocol("WM_DELETE_WINDOW", self.close_app)
 
@@ -176,13 +175,10 @@ class CameraApp:
 
             command = f'VEN{float(energy)}\r'
             # Send the command to the device
-            self.device_socket.send(command.encode())
-            data_set = self.device_socket.recv(256)
-            self.device_socket.send('REN\r'.encode())
-            data_read = self.device_socket.recv(256)
-            print(data_read.decode('utf-8'))
+            result=self.leed_device.send_command(command)
+            print(result)
             # Display the result in the result_label
-            self.result_label.config(text=f"Result: {data_read.decode('utf-8')}")
+            self.result_label.config(text=f"Result: {result}")
             self.root.after(5000)
             # Capture image
             ret, frame = self.cap.read()
@@ -207,18 +203,8 @@ class CameraApp:
     def send_command(self):
         energy = self.command_entry.get()
         command=f'VEN{float(energy)}\r'
-
-
-
-
-        # Send the command to the device
-        self.device_socket.send(command.encode())
-        data_set = self.device_socket.recv(256)
-        self.device_socket.send('REN\r'.encode())
-        data_read = self.device_socket.recv(256)
-        print(data_read.decode('utf-8'))
-        # Display the result in the result_label
-        self.result_label.config(text=f"Result: {data_read.decode('utf-8')}")
+        result=self.leed_device.send_command(command)
+        self.result_label.config(text=f"Result: {result}")
     def capture_photo(self):
         ret, frame = self.cap.read()
         if ret:
@@ -293,18 +279,21 @@ class CameraApp:
         try:
             with open(script_directory+'/ccd_config.toml', 'r') as config_file:
                 config = toml.load(config_file)
-                self.leed_server_host=config.get('LEEDSettings',{}).get('server_host')
-                self.leed_server_port = config.get('LEEDSettings', {}).get('server_port')
+                leed_server_host=config.get('LEEDSettings',{}).get('server_host')
+                leed_server_port = config.get('LEEDSettings', {}).get('server_port')
         except FileNotFoundError:
-            self.leed_server_host = "129.217.168.64"
-            self.leed_server_port = 4004
-        print(self.leed_server_port)
-        self.update_settings_leed_ui()
+            leed_server_host = "129.217.168.64"
+            leed_server_port = 4004
+        self.leed_server_host_text.set(leed_server_host)
+        self.leed_server_port_text.set(leed_server_port)
     def save_leed_settings(self):
         with open(script_directory+'/ccd_config.toml', 'r') as config_file:
             config = toml.load(config_file)
-        config['LEEDSettings']['server_host'] = self.leed_server_host
-        config['LEEDSettings']['server_port'] = self.leed_server_port
+        if self.leed_device.validate_leed_ip(self.leed_server_host_text.get()):
+            config['LEEDSettings']['server_host'] = self.leed_server_host_text.get()
+            config['LEEDSettings']['server_port'] = self.leed_server_port_text.get()
+        else:
+            print('Current configuration does not contain a valid IP, therefore it was not saved.')
         with open(script_directory+'/ccd_config.toml', 'w') as config_file:
             toml.dump(config, config_file)
     def video_capture_thread(self):
@@ -496,22 +485,17 @@ class CameraApp:
         settings_window.protocol("WM_DELETE_WINDOW", lambda: self.on_settings_window_close())
 
     def on_leed_server_port_change(self, *args):
-        # Call your validation function here
         self.validate_leed_ip()
-
-    # Assuming self.leed_server_port_text is a StringVar linked to an Entry widget
     def validate_leed_ip(self, *args):
         ip_address = self.leed_server_host_entry.get()
-        if self.is_valid_ip(ip_address):
-            self.leed_valid_ip=True
-            self.validity_label.config(text="Valid IP", fg='green')
+        self.leed_device.validate_leed_ip(ip_address=ip_address)
+        if self.leed_device.valid_ip:
+            self.leed_device.change_ip_address(new_ip=ip_address)
+            self.validity_label.config(text="Valid IP", fg="green")
         else:
-            self.leed_valid_ip=False
             self.validity_label.config(text="Invalid IP", fg="red")
 
-    def is_valid_ip(self, ip):
-        ip_regex = r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$"
-        return bool(re.match(ip_regex, ip))
+
     def clicked_load_settings(self):
         self.load_camera_settings()
         self.update_settings()
@@ -594,9 +578,6 @@ class CameraApp:
 
         except ValueError:
             print("Please enter valid integers for width and height.")
-    def update_settings_leed_ui(self):
-        self.leed_server_host_text.set(self.leed_server_host)
-        self.leed_server_port_text.set(self.leed_server_port)
     def update_settings_camera_ui(self):
         self.camera_combobox.current(self.camera_index)
         if self.selected_resolution in self.resolutions:
