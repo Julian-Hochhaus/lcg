@@ -29,30 +29,45 @@ class LEEDDevice:
         except ConnectionRefusedError:
             raise ConnectionError("Could not connect to the LEED device")
             return False
+    def send_energy(self, energy):
+        try:
+            command = f'VEN{float(energy)}\r'
+            result=self.send_command(command)
+            return result
+        except OSError:
+            return f"Error sending command. The device returned {result}"
+    def read_energy(self):
+        try:
+            command = f'REN\r'
+            result = self.send_command(command)
+            return result
+        except OSError:
+            return f"Error sending command. The device returned {result}"
     def send_command(self, command):
         try:
             self.device_socket.send(command.encode())
             data_set = self.device_socket.recv(256)
-            self.device_socket.send('REN\r'.encode())
-            data_read = self.device_socket.recv(256)
-            return data_read.decode('utf-8')
+            return data_set.decode('utf-8')
         except OSError:
             return f"Error sending command. The device returned {data_set}"
 
     def change_ip_address(self, new_ip):
         if self.is_valid_ip(new_ip):
-            try:
-                self.device_socket.connect((new_ip, self.leed_server_port))
+            if not self.connection_established:  # Check if connection is not yet established
+                try:
+                    self.device_socket.connect((new_ip, self.leed_server_port))
+                    self.leed_server_host = new_ip
+                    self.valid_ip = True
+                    self.connection_established = True  # Update connection status
+                except ConnectionRefusedError:
+                    self.valid_ip = False
+                    raise ConnectionError("Could not connect to the LEED device with the new IP")
+            else:
+                # If connection is already established, update IP and close the current connection
                 self.leed_server_host = new_ip
                 self.valid_ip = True
                 self.close_connection()
                 self.device_socket = socket(AF_INET, SOCK_STREAM)
-                self.connection_established = self.connect_to_device()
-                return True
-            except ConnectionRefusedError:
-                self.valid_ip = False
-                raise ConnectionError("Could not connect to the LEED device with the new IP")
-                return False
         else:
             self.valid_ip = False
             raise ValueError("Invalid IP address. IP change was not possible.")

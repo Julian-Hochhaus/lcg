@@ -1,7 +1,7 @@
 [CameraSettings]
 camera_index = 2
 initial_resolution = "2048x2048"
-brightness = 0
+brightness = 1144.0
 gain_auto = false
 gain = 219.0
 exposure_auto = false

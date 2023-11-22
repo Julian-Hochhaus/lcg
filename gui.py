@@ -36,7 +36,7 @@ def list_available_cameras():
     return cameras
 
 
-class CameraApp:
+class LCGApp:
     def __init__(self, root, camera_index, camera_list):
         self.root = root
         self.root.title("Camera GUI")
@@ -84,9 +84,9 @@ class CameraApp:
                                           y2+self.last_saved_image_label.winfo_reqheight()// 2 + 240,fill="grey95", outline="black")
 
         self.load_camera_settings()
-        self.cap = cv2.VideoCapture(camera_index, cv2.CAP_V4L2)
 
-        self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"FFV1"))
+        self.camera = CameraDevice(self.camera_index)
+
         self.q = queue.Queue()
         self.stop_event = threading.Event()
 
@@ -128,8 +128,8 @@ class CameraApp:
         self.result_label = tk.Label(self.settings_frame, text="Result:")
         self.result_label.pack()
 
-        self.send_command_button = tk.Button(self.settings_frame, text="Send Command", command=self.send_command)
-        self.send_command_button.pack()
+        self.set_energy_button = tk.Button(self.settings_frame, text="Set energy", command=self.set_energy)
+        self.set_energy_button.pack()
 
         self.select_directory_button = tk.Button(self.settings_frame, text="Select Save Directory", command=self.select_directory)
         self.select_directory_button.pack()
@@ -141,8 +141,7 @@ class CameraApp:
 
         # Socket configuration for the LEED
         self.leed_device=LEEDDevice(leed_host='129.217.168.64', leed_port=4004)
-        print(self.leed_device.connection_established)
-
+        self.load_leed_settings()
         self.root.protocol("WM_DELETE_WINDOW", self.close_app)
 
     def display_last_saved_image(self, frame):
@@ -151,8 +150,8 @@ class CameraApp:
         img = Image.fromarray(frame)
 
         # Get the actual camera stream resolution
-        actual_width = self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-        actual_height = self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        actual_width = self.camera.get(cv2.CAP_PROP_FRAME_WIDTH)
+        actual_height = self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT)
         # Calculate the ratio to maintain a minimum height of 480 pixels
         ratio = float(actual_width / actual_height)
         new_width = int(480 * ratio)
@@ -173,16 +172,13 @@ class CameraApp:
             def capture_next():
                 self.capture_energy_image(energy + increment, end_energy, increment)
 
-            command = f'VEN{float(energy)}\r'
             # Send the command to the device
-            result=self.leed_device.send_command(command)
-            print(result)
-            # Display the result in the result_label
-            self.result_label.config(text=f"Result: {result}")
+            self.leed_device.send_energy(energy)
+            self.result_label.config(text=f"Result: {self.leed_device.read_energy()}")
             self.root.after(5000)
             # Capture image
-            ret, frame = self.cap.read()
-            if ret:
+            status,frame=self.camera.get_frame()
+            if status:
                 file_path = self.save_directory + f'/images/EN_{energy}.jpg'
                 # Save the captured frame as an image
                 cv2.imwrite(file_path, frame)
@@ -200,14 +196,13 @@ class CameraApp:
         # Allow the user to select a directory for saving images
         self.save_directory = filedialog.askdirectory()
         print("Save directory:", self.save_directory)
-    def send_command(self):
+    def set_energy(self):
         energy = self.command_entry.get()
-        command=f'VEN{float(energy)}\r'
-        result=self.leed_device.send_command(command)
+        result=self.leed_device.send_energy(energy)
         self.result_label.config(text=f"Result: {result}")
     def capture_photo(self):
-        ret, frame = self.cap.read()
-        if ret:
+        status, frame = self.camera.get_frame()
+        if status:
             file_path = filedialog.asksaveasfilename(defaultextension=".jpg",
                                                      filetypes=[("JPEG files", "*.jpg"), ("All files", "*.*")],
                                                      title="Save Photo As")
@@ -236,7 +231,7 @@ class CameraApp:
                 self.exposure_time=config.get('CameraSettings', {}).get('exposure_time')
 
         except FileNotFoundError:
-            print('Error')
+            print('Settings File not found.')
             self.camera_index = 0
             self.selected_resolution.set("640x480")
             self.brightness = 100
@@ -252,7 +247,6 @@ class CameraApp:
             with open(script_directory+'/ccd_config.toml', 'r') as config_file:
                 config = toml.load(config_file)
                 resolutions = config.get('CameraSettings', {}).get('resolutions')
-                print(resolutions)
         except FileNotFoundError as e:
             print('Error: File not found:', e)
         except Exception as e:
@@ -298,11 +292,11 @@ class CameraApp:
             toml.dump(config, config_file)
     def video_capture_thread(self):
         while not self.stop_event.is_set():
-            ret, frame = self.cap.read()
-            if ret:
-                frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                frame_rate = self.cap.get(cv2.CAP_PROP_FPS)
+            status, frame = self.camera.get_frame()
+            if status:
+                frame_width = int(self.camera.get(cv2.CAP_PROP_FRAME_WIDTH))
+                frame_height = int(self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                frame_rate = self.camera.get(cv2.CAP_PROP_FPS)
 
                 self.frame_width_label.config(text=f"Frame Width: {frame_width}")
                 self.frame_height_label.config(text=f"Frame Height: {frame_height}")
@@ -315,8 +309,8 @@ class CameraApp:
             img = Image.fromarray(frame)
 
             # Get the actual camera stream resolution
-            actual_width = self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-            actual_height = self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+            actual_width = self.camera.get(cv2.CAP_PROP_FRAME_WIDTH)
+            actual_height = self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT)
             # Calculate the ratio to maintain a minimum height of 480 pixels
             ratio = float(actual_width/ actual_height)
             new_width = int(480* ratio)
@@ -348,8 +342,7 @@ class CameraApp:
 
     def close_app(self):
         self.stop_event.set()
-        if self.cap.isOpened():
-            self.cap.release()
+        self.camera.close_camera()
         self.root.destroy()
 
     def open_settings(self):
@@ -471,9 +464,20 @@ class CameraApp:
         self.leed_server_port_entry.pack()
         self.leed_server_host_entry.bind("<FocusOut>", self.validate_leed_ip)
         self.leed_server_port_text.trace("w", self.on_leed_server_port_change)
+        leed_test_frame=tk.Frame(leed_settings_frame, bd=2, bg='gray95')
+        leed_test_frame.pack()
+        label = tk.Label(leed_test_frame, text='Command:')
+        label.pack(side=tk.LEFT)
+
+        entry_test_command = tk.Entry(leed_test_frame)
+        entry_test_command.pack(side=tk.LEFT)
+
+        test_command_button = tk.Button(leed_test_frame, text="Send command")
+        test_command_button.pack(side=tk.LEFT)
+
         leed_button_frame = tk.Frame(leed_settings_frame)
         leed_button_frame.pack()
-        leed_command_button = tk.Button(leed_button_frame, text="Send command", command=self.send_command)
+        leed_command_button = tk.Button(leed_button_frame, text="Set energy", command=self.set_energy)
         leed_command_button.pack(side=tk.LEFT)
         leed_save_button = tk.Button(leed_button_frame, text="Save LEED Settings\n to config",
                                      command=self.save_leed_settings)
@@ -498,6 +502,7 @@ class CameraApp:
 
     def clicked_load_settings(self):
         self.load_camera_settings()
+        self.load_leed_settings()
         self.update_settings()
     def set_brightness(self, value):
         self.brightness = float(value)
@@ -515,7 +520,6 @@ class CameraApp:
             device='/dev/video'+str(camera_index)
             value= '--set-ctrl=gain_auto='+str(auto_gain_value)
             subprocess.run(['v4l2-ctl', '--device', device, value])
-            #print("gain_auto set to {} successfully.".format(auto_gain_value))
         except subprocess.CalledProcessError as e:
             print(f"Error setting gain to {auto_gain_value}: {e}")
 
@@ -541,15 +545,15 @@ class CameraApp:
         selected_width, selected_height = self.resolutions[self.selected_resolution]
         try:
 
-            if self.cap.isOpened():
-                self.cap.release()
-            self.set_auto_gain(self.camera_index, self.auto_gain_value)
-            self.cap = cv2.VideoCapture(self.camera_index, cv2.CAP_V4L2)  # Use initial camera index
-            ret, frame = self.cap.read()
-            if ret:
-                frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                frame_rate = self.cap.get(cv2.CAP_PROP_FPS)
+            if self.camera.isOpened():
+                self.camera.release()
+            self.camera.set_auto_gain(self.auto_gain_value)
+            self.camera.update_camera_index(self.camera_index)
+            status, frame = self.camera.get_frame()
+            if status:
+                frame_width = int(self.camera.get(cv2.CAP_PROP_FRAME_WIDTH))
+                frame_height = int(self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                frame_rate = self.camera.get(cv2.CAP_PROP_FPS)
 
                 self.frame_width_label.config(text=f"Frame Width: {frame_width}")
                 self.frame_height_label.config(text=f"Frame Height: {frame_height}")
@@ -558,15 +562,14 @@ class CameraApp:
             else:
                 # If the stream is stopped
                 self.stream_status_label.config(text="Stream Status: Stopped", fg="red")
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, selected_width)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, selected_height)
+            self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, selected_width)
+            self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, selected_height)
 
-            self.cap.set(cv2.CAP_PROP_BRIGHTNESS, self.brightness)
-            self.cap.set(cv2.CAP_PROP_GAIN, self.gain)
-            self.cap.set(cv2.CAP_PROP_EXPOSURE, self.exposure_time_absolute)
+            self.camera.set(cv2.CAP_PROP_BRIGHTNESS, self.brightness)
+            self.camera.set(cv2.CAP_PROP_GAIN, self.gain)
+            self.camera.set(cv2.CAP_PROP_EXPOSURE, self.exposure_time_absolute)
             self.auto_exposure_value = 1 if not self.boolean_auto_exposure.get() else 3
-            self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, self.auto_exposure_value)
-            print(self.cap.get(cv2.CAP_PROP_AUTO_EXPOSURE), self.boolean_auto_exposure.get())
+            self.camera.set(cv2.CAP_PROP_AUTO_EXPOSURE, self.auto_exposure_value)
             # Restart video thread with updated camera settings
             self.stop_event.set()
             self.video_thread.join()
@@ -595,7 +598,7 @@ def main():
 
         if camera_index < len(cameras):
             root = tk.Tk()
-            app = CameraApp(root, camera_index, cameras)
+            app = LCGApp(root, camera_index, cameras)
             app.update_video()  # Start the video update loop
             root.mainloop()
         else:
