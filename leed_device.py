@@ -40,9 +40,23 @@ class LEEDDevice:
         try:
             command = f'REN\r'
             result = self.send_command(command)
-            return result
+            if self.regex_read_energy(result):
+                match = re.search(r'\b\d+\.\d+(?=\s|$)', result)
+                if match:
+                    return float(match.group())  # Returning the matched float value
+                else:
+                    return "No matching decimal number found in the result."
+            else:
+                raise ValueError("Pattern matching failed. The return of the LEED device does not match expectations.")
         except OSError:
-            return f"Error reading energy."
+            return f"Error in communication."
+        except ValueError as ve:
+            return str(ve)
+    def regex_read_energy(self, input_text):
+        pattern = re.compile(
+            r"[A-Za-z]+\s+[A-Za-z]+\s+\++\d\b\s\+[0-9\.]+\s+\+[0-9\.]+\s+\+[0-9\.]+\s\++[0-9\.A-Za-z\-]+\s+>",
+            re.IGNORECASE)
+        return pattern.match(input_text)
     def send_command(self, command):
         try:
             self.device_socket.send(command.encode())
