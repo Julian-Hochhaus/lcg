@@ -45,8 +45,8 @@ class LEEDDevice:
             return f"Error reading energy."
     def send_command(self, command):
         try:
-            re=self.device_socket.send(command.encode())
-            data_set = self.device_socket.recv(256)
+            self.device_socket.send(command.encode())
+            data_set = self.device_socket.recv(512)
             return data_set.decode('utf-8')
         except OSError:
             return f"Error sending command."

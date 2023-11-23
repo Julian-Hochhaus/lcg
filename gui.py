@@ -94,49 +94,101 @@ class LCGApp:
         self.video_thread.daemon = True
         self.video_thread.start()
 
+        label_font = ('Arial', 12)
+        button_font = ('Arial', 12)
+
+        # Bottom Frame
         self.bottom_frame = tk.Frame(root, borderwidth=5)
         self.bottom_frame.pack(side='bottom')
-        self.settings_frame = tk.Frame(self.bottom_frame,bd=2, relief=tk.RIDGE)
-        self.settings_frame.pack(side='left')
-        self.info_frame = tk.Frame(self.bottom_frame, bd=2, relief=tk.RIDGE)
+
+        # Settings Frame
+        self.settings_frame = tk.Frame(self.bottom_frame, bd=2, relief=tk.RIDGE)
+        self.settings_frame.pack()
+
+        # Device Settings Frame
+        self.device_settings_frame = tk.Frame(self.bottom_frame, bd=2, relief=tk.RIDGE)
+        self.device_settings_frame.pack()
+
+        # LEED Settings Frame
+        self.leed_settings_frame = tk.Frame(self.device_settings_frame, bd=2, relief=tk.RIDGE)
+        self.leed_settings_frame.pack(side='left')
+
+        # Camera Settings Frame
+        self.camera_settings_frame = tk.Frame(self.device_settings_frame, bd=2, relief=tk.RIDGE)
+        self.camera_settings_frame.pack(side='left')
+
+        # Info Frame
+        self.info_frame = tk.Frame(self.device_settings_frame, bd=2, relief=tk.RIDGE)
         self.info_frame.pack(side="left")
+
+        button_width = 25
+
+        self.info_label = tk.Label(self.info_frame, text="Stream Info:", font=label_font,width=25)
+        self.info_label.pack()
         self.stream_status_label = tk.Label(self.info_frame, text="Stream Status: Stopped", fg="red")
         self.stream_status_label.pack(side="top", pady=5)
-
-        self.frame_width_label = tk.Label(self.info_frame, text="Frame Width: ")
+        self.frame_width_label = tk.Label(self.info_frame, text="Frame Width: ", font=label_font)
         self.frame_width_label.pack()
 
-        self.frame_height_label = tk.Label(self.info_frame, text="Frame Height: ")
+        self.frame_height_label = tk.Label(self.info_frame, text="Frame Height: ", font=label_font)
         self.frame_height_label.pack()
 
-        self.frame_rate_label = tk.Label(self.info_frame, text="Frame Rate: ")
+        self.frame_rate_label = tk.Label(self.info_frame, text="Frame Rate: ", font=label_font)
         self.frame_rate_label.pack()
-        self.settings_button = tk.Button(self.settings_frame, text="Open Settings", command=self.open_settings)
-        self.settings_button.pack()
 
-        self.capture_button = tk.Button(self.settings_frame, text="Capture Single Photo", command=self.capture_photo)
-        self.capture_button.pack()
-        self.device_label = tk.Label(self.settings_frame, text="Device Control:")
+        self.device_label = tk.Label(self.leed_settings_frame, text="LEED Control:", width=25, font=label_font)
         self.device_label.pack()
 
-        self.command_label = tk.Label(self.settings_frame, text="Energy:")
-        self.command_label.pack()
+        leed_test_frame=tk.Frame(self.leed_settings_frame)
+        leed_test_frame.pack()
+        leed_command_frame = tk.Frame(leed_test_frame)
+        leed_command_frame.pack()
+        self.command_label = tk.Label(leed_command_frame, text="Energy:", font=label_font)
+        self.command_label.pack(side=tk.LEFT)
 
-        self.command_entry = tk.Entry(self.settings_frame)
-        self.command_entry.pack()
+        self.command_entry = tk.Entry(leed_command_frame)
+        self.command_entry.pack(side=tk.LEFT)
 
-        self.result_label = tk.Label(self.settings_frame, text="Result:")
+        self.set_energy_button = tk.Button(leed_command_frame, text="Set energy", command=self.set_energy, font=button_font)
+        self.set_energy_button.pack(side=tk.LEFT)
+        leed_test_output = tk.Frame(leed_test_frame)
+        leed_test_output.pack()
+        result_frame = tk.Frame(leed_test_output, bd=2, relief=tk.RAISED, bg="grey65")
+        result_frame.pack()
+
+        self.result_label_terminal = tk.Label(result_frame, text="LEED Device Output", bg="grey70", fg="black", font=("Courier", 12, 'bold'), width=50,
+                                    height=1, anchor="nw")
+        self.result_label_terminal.pack(side=tk.TOP)
+
+        output_frame = tk.Frame(result_frame, bd=2, relief=tk.SUNKEN, bg="black")
+        output_frame.pack()
+
+        self.result_label = tk.Label(output_frame, text=">", bg="grey40", fg="white", font=("Courier", 12), width=50,
+                                    height=5, anchor="nw")
         self.result_label.pack()
 
-        self.set_energy_button = tk.Button(self.settings_frame, text="Set energy", command=self.set_energy)
-        self.set_energy_button.pack()
 
-        self.select_directory_button = tk.Button(self.settings_frame, text="Select Save Directory", command=self.select_directory)
+        self.info_cam_label = tk.Label(self.camera_settings_frame, text="Camera control:", font=label_font, width=25)
+        self.info_cam_label.pack()
+
+        # Buttons with fixed widths and font settings
+        self.settings_button = tk.Button(self.settings_frame, text="Open Settings", command=self.open_settings,
+                                         width=button_width, font=button_font)
+        self.settings_button.pack()
+
+        self.capture_button = tk.Button(self.camera_settings_frame, text="Capture Single Photo",
+                                        command=self.capture_photo, width=button_width, font=button_font)
+        self.capture_button.pack()
+
+
+
+        self.select_directory_button = tk.Button(self.camera_settings_frame, text="Select Save Directory",
+                                                 command=self.select_directory, width=button_width, font=button_font)
         self.select_directory_button.pack()
 
-        # Create a button to start the image capture loop
-        self.start_capture_button = tk.Button(self.settings_frame, text="Start Image Capture Loop",
-                                              command=lambda: self.capture_images_loop())  # Example energy values
+        self.start_capture_button = tk.Button(self.camera_settings_frame, text="Start Image Capture Loop",
+                                              command=lambda: self.capture_images_loop(), width=button_width,
+                                              font=button_font)
         self.start_capture_button.pack()
 
         # Socket configuration for the LEED
@@ -199,10 +251,16 @@ class LCGApp:
         # Allow the user to select a directory for saving images
         self.save_directory = filedialog.askdirectory()
         print("Save directory:", self.save_directory)
+
     def set_energy(self):
         energy = self.command_entry.get()
-        result=self.leed_device.send_energy(energy)
-        self.result_label.config(text=f"Result: {result}")
+        try:
+            energy_float = float(energy)
+            result = self.leed_device.send_energy(energy_float)
+            self.result_label.config(text=f"{result}")
+        except ValueError:
+            self.result_label.config(text="Invalid energy value. Please enter a valid number.")
+
     def capture_photo(self):
         status, frame = self.camera.get_frame()
         if status:
@@ -467,6 +525,10 @@ class LCGApp:
         self.leed_server_port_entry.pack()
         self.leed_server_host_entry.bind("<FocusOut>", self.validate_leed_ip)
         self.leed_server_port_text.trace("w", self.on_leed_server_port_change)
+
+
+
+
         leed_test_frame=tk.Frame(leed_settings_frame, bd=2, bg='grey85',highlightthickness=1, highlightbackground="black")
         leed_test_frame.pack()
         leed_command_frame=tk.Frame(leed_test_frame)
@@ -481,9 +543,19 @@ class LCGApp:
         test_command_button.pack(side=tk.LEFT)
         leed_test_output=tk.Frame(leed_test_frame)
         leed_test_output.pack()
-        output_leed_label = tk.Label(leed_test_output, text="Output:")
-        output_leed_label.pack()
-        self.output_leed = tk.Label(leed_test_output, text="")
+        result_frame = tk.Frame(leed_test_output, bd=2, relief=tk.RAISED, bg="grey65")
+        result_frame.pack()
+
+        self.result_label = tk.Label(result_frame, text="LEED Device Output", bg="grey70", fg="black",
+                                     font=("Courier", 12, 'bold'), width=50,
+                                     height=1, anchor="nw")
+        self.result_label.pack(side=tk.TOP)
+
+        output_frame = tk.Frame(result_frame, bd=2, relief=tk.SUNKEN, bg="black")
+        output_frame.pack()
+
+        self.output_leed = tk.Label(output_frame, text=">", bg="grey40", fg="white", font=("Courier", 12), width=50,
+                                    height=5, anchor="nw")
         self.output_leed.pack()
         leed_button_frame = tk.Frame(leed_settings_frame)
         leed_button_frame.pack()
@@ -608,7 +680,15 @@ def main():
     try:
         cameras = list_available_cameras()
         camera_index = int(input("Enter the camera index to use: "))
-
+        with open(script_directory+'/ccd_config.toml', 'r') as config_file:
+            config = toml.load(config_file)
+        if config.get('CameraSettings', {}).get('camera_index')!=camera_index:
+            print('The choosen camera differs from the settings in the config file.')
+            camera_idx=int(input('Please confirm by entering the camera index you wish to use again to overwrite the settings in the config file:'))
+            config['CameraSettings']['camera_index']=camera_idx
+            camera_index=camera_idx
+        with open(script_directory+'/ccd_config.toml', 'w') as config_file:
+            toml.dump(config, config_file)
         if camera_index < len(cameras):
             root = tk.Tk()
             app = LCGApp(root, camera_index, cameras)
