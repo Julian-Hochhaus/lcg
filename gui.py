@@ -16,7 +16,7 @@ import tkinter.filedialog as filedialog
 
 script_directory = os.path.dirname(os.path.abspath(__file__))
 settings_window = None
-
+__version__ = "0.0.1"
 
 def list_available_cameras():
     cameras = []
@@ -45,7 +45,7 @@ class LCGApp:
         self.approx_gain = []
         self.capture_step = 0
         self.root = root
-        self.root.title("Camera GUI")
+        self.root.title(f"Camera GUI v.{__version__}")
         self.root.geometry("1400x1020")
         self.root.maxsize(width=1920, height=1100)
 
