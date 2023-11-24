@@ -54,7 +54,8 @@ class LCGApp:
         self.available_cameras = camera_list
         self.camera_index = camera_index  # Store initial camera index
         self.resolutions = self.load_resolutions()
-        self.selected_resolution = '640x480'
+        self.selected_resolution = tk.StringVar()
+        self.selected_resolution.set('640x480')
         self.brightness = 100
         self.gain = 100
         self.exposure_time = 0.5
@@ -66,8 +67,7 @@ class LCGApp:
         self.calibration_file = script_directory + '/calibrations/calibration.csv'
 
         self.set_auto_gain(self.camera_index, self.auto_gain_value)
-
-        self.videoframes = tk.Canvas(root, width=1380, height=540)
+        self.videoframes = tk.Canvas(root, width=1380, height=490)
         self.videoframes.pack(side='top')
         self.videoframes.update()
         # Place the live stream and last saved image on the Canvas
@@ -219,7 +219,7 @@ class LCGApp:
                                                  width=button_width, font=button_font)
         self.confirm_settings_button.pack()
         self.label_series_confirm = tk.Label(frame_series, text='Series will be recorded with:\n', bg='grey95',
-                                             fg='black', height=4, anchor='nw')
+                                             fg='black', height=5, anchor='nw')
         self.label_series_confirm.pack()
         start_energy_label = tk.Label(image_series_subframe1, text="Start Energy (eV):", font=label_font)
         start_energy_label.pack(side=tk.LEFT)
@@ -269,7 +269,7 @@ class LCGApp:
         self.start_capture_button.pack()
         self.initialize_settings_frame()
         self.load_camera_settings()
-
+        self.update_settings()
         # Socket configuration for the LEED
         self.leed_device = LEEDDevice(leed_host='129.217.168.64', leed_port=4004)
         self.load_leed_settings()
@@ -454,12 +454,20 @@ class LCGApp:
             print("Image capturing completed")
 
     def select_calibration_file(self):
-        self.calibration_file = filedialog.askopenfilename()
-        self.calibration_file_text.delete(1.0, tk.END)
-        self.calibration_file_text.insert(tk.END, self.calibration_file)
-        self.calibration_file_text_config.delete(1.0, tk.END)
-        self.calibration_file_text_config.insert(tk.END, self.calibration_file)
-        print("Calibration File:", self.calibration_file)
+        new_file_path= filedialog.askopenfilename()
+        if os.path.isfile(new_file_path):
+            self.calibration_file = new_file_path
+            self.calibration_file_text.delete(1.0, tk.END)
+            self.calibration_file_text_config.delete(1.0, tk.END)
+            self.calibration_file_text.insert(tk.END, self.calibration_file)
+            self.calibration_file_text_config.insert(tk.END, self.calibration_file)
+            print("Calibration file successfully set to:", self.calibration_file)
+        else:
+            print("File does not exist. Reverting to last saved one.")
+            self.calibration_file_text.delete(1.0, tk.END)
+            self.calibration_file_text_config.delete(1.0, tk.END)
+            self.calibration_file_text.insert(tk.END, self.calibration_file)
+            self.calibration_file_text_config.insert(tk.END, self.calibration_file)
 
     def select_directory(self):
         self.save_directory = filedialog.askdirectory()
@@ -510,7 +518,7 @@ class LCGApp:
             with open(script_directory + '/ccd_config.toml', 'r') as config_file:
                 config = toml.load(config_file)
                 self.camera_index = config.get('CameraSettings', {}).get('camera_index')
-                self.selected_resolution = config.get('CameraSettings', {}).get('initial_resolution')
+                self.selected_resolution.set(config.get('CameraSettings', {}).get('initial_resolution'))
                 self.brightness = config.get('CameraSettings', {}).get('brightness')
                 self.gain = config.get('CameraSettings', {}).get('gain')
                 self.auto_gain_value = 0 if not config.get('CameraSettings', {}).get('gain_auto') else 1
@@ -551,7 +559,7 @@ class LCGApp:
 
         # Update specific settings
         config['CameraSettings']['camera_index'] = self.camera_index
-        config['CameraSettings']['initial_resolution'] = self.selected_resolution
+        config['CameraSettings']['initial_resolution'] = self.selected_resolution.get()
         config['CameraSettings']['brightness'] = self.brightness
         config['CameraSettings']['gain'] = self.gain
         config['CameraSettings']['gain_auto'] = self.boolean_auto_gain.get()
@@ -640,7 +648,6 @@ class LCGApp:
 
     def open_settings(self):
         global settings_window
-
         if settings_window:
             settings_window.deiconify()
             settings_window.lift()
@@ -649,8 +656,14 @@ class LCGApp:
 
     def on_settings_window_close(self):
         global settings_window
-        settings_window.withdraw()  # Hide the window instead of closing it
+        settings_window.withdraw()
 
+    def on_settings_window_minimize(self, event):
+        #not working on ubuntu
+        global settings_window
+        settings_window.withdraw()
+
+    # Bind the method to the <Unmap> event of the settings window
     def initialize_settings_frame(self):
         global settings_window
 
@@ -678,15 +691,15 @@ class LCGApp:
         tk.Label(resolution_frame, text="Select Resolution:").pack()
         self.resolution_combobox = ttk.Combobox(resolution_frame, textvariable=self.selected_resolution,
                                                 values=list(self.resolutions.keys()), state="readonly")
-        if self.selected_resolution in self.resolutions:
-            self.resolution_combobox.set(self.selected_resolution)
+        if self.selected_resolution.get() in self.resolutions:
+            self.resolution_combobox.set(self.selected_resolution.get())
         self.resolution_combobox.pack()
 
         brightness_frame = tk.Frame(settings_camera)
         brightness_frame.pack()
         tk.Label(brightness_frame, text="Brightness:").pack()
         self.brightness_scale = tk.Scale(brightness_frame, from_=0, to=4095, resolution=1, orient=tk.HORIZONTAL,
-                                         command=self.set_brightness)
+                                         command=self.set_brightness, length=410)
         self.brightness_scale.set(self.brightness)
         self.brightness_scale.pack()
 
@@ -694,14 +707,14 @@ class LCGApp:
         gain_frame.pack()
         tk.Label(gain_frame, text="Gain:").pack()
         self.gain_scale = tk.Scale(gain_frame, from_=0, to=480, resolution=1, orient=tk.HORIZONTAL,
-                                   command=self.set_gain)
+                                   command=self.set_gain, length=480)
         self.gain_scale.set(self.gain)
         self.gain_scale.pack()
 
         exposure_frame = tk.Frame(settings_camera)
         exposure_frame.pack()
-        self.exposure_time_entry = tk.Scale(exposure_frame, from_=0.1, to=50, resolution=0.1, orient=tk.HORIZONTAL,
-                                            label="Exposure Time (s)", length=150,
+        self.exposure_time_entry = tk.Scale(exposure_frame, from_=0.0, to=10, resolution=0.025, orient=tk.HORIZONTAL,
+                                            label="Exposure Time (s)", length=400,
                                             command=self.set_exposure_time_absolute)
         self.exposure_time_entry.set(self.exposure_time)  # Set the default value
         self.exposure_time_entry.pack()
@@ -806,7 +819,7 @@ class LCGApp:
         load_leed_button = tk.Button(leed_button_frame, text="Load LEED Settings\n from config",
                                      command=self.load_leed_settings)
         load_leed_button.pack(side=tk.LEFT)
-
+        settings_window.bind("<Unmap>", lambda event: self.on_settings_window_minimize(event))
         settings_window.protocol("WM_DELETE_WINDOW", lambda: self.on_settings_window_close())
         calibration_settings_frame = tk.Frame(settings_window, bd=2, relief=tk.RIDGE, bg='grey85')
         calibration_settings_frame.pack()
@@ -839,6 +852,9 @@ class LCGApp:
 
     def add_calibration_datapoint(self):
         energy = self.leed_device.read_energy()
+        if energy is None:
+            print("Failed to retrieve a valid energy value. Please try again.")
+            return
         gain = self.camera.get(cv2.CAP_PROP_GAIN)
         exposure_time_in_s = self.camera.get(cv2.CAP_PROP_EXPOSURE) // 10000
         for index, entry in enumerate(self.calibration_values):
@@ -934,7 +950,8 @@ class LCGApp:
             self.update_settings()  # Apply the new camera settings
 
     def update_settings(self):
-        selected_width, selected_height = self.resolutions[self.selected_resolution]
+        print(self.selected_resolution.get())
+        selected_width, selected_height = self.resolutions[self.selected_resolution.get()]
         try:
 
             if self.camera.isOpened():
@@ -976,8 +993,8 @@ class LCGApp:
 
     def update_settings_camera_ui(self):
         self.camera_combobox.current(self.camera_index)
-        if self.selected_resolution in self.resolutions:
-            self.resolution_combobox.set(self.selected_resolution)
+        if self.selected_resolution.get() in self.resolutions:
+            self.resolution_combobox.set(self.selected_resolution.get())
 
         self.brightness_scale.set(self.brightness)
         self.gain_scale.set(self.gain)

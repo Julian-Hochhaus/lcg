@@ -3,7 +3,7 @@ camera_index = 2
 initial_resolution = "2048x2048"
 brightness = 0.0
 gain_auto = false
-gain = 127.0
+gain = 28.0
 exposure_auto = false
 exposure_time = 1
 

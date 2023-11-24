@@ -37,22 +37,30 @@ class LEEDDevice:
         except OSError:
             return f"Error setting energy."
     def read_energy(self):
-        try:
-            command = f'REN\r'
-            result = self.send_command(command)
-            if self.regex_read_energy(result):
-                match = re.search(r'\b\d+\.\d+(?=\s|$)', result)
-                if match:
-                    print(match.group())
-                    return float(match.group())  # Returning the matched float value
+        max_attempts = 3
+        attempts = 0
+
+        while attempts < max_attempts:
+            try:
+                command = f'REN\r'
+                result = self.send_command(command)
+                if self.regex_read_energy(result):
+                    match = re.search(r'\b\d+\.\d+(?=\s|$)', result)
+                    if match:
+                        return float(match.group())  # Returning the matched float value
+                    else:
+                        raise ValueError("No matching decimal number found in the result.")
                 else:
-                    return "No matching decimal number found in the result."
-            else:
-                raise ValueError("Pattern matching failed. The return of the LEED device does not match expectations.")
-        except OSError:
-            return f"Error in communication."
-        except ValueError as ve:
-            return str(ve)
+                    raise ValueError(
+                        "Pattern matching failed. The return of the LEED device does not match expectations.")
+            except OSError:
+                attempts += 1
+                print(f"Error in communication. Retrying... (Attempt {attempts}/{max_attempts})")
+            except ValueError as ve:
+                attempts += 1
+                print(f"ValueError: {ve}. Retrying... (Attempt {attempts}/{max_attempts})")
+
+        return None
     def regex_read_energy(self, input_text):
         pattern = re.compile(
             r"[A-Za-z]+\s+[A-Za-z]+\s+\++\d\b\s\+[0-9\.]+\s+\+[0-9\.]+\s+\+[0-9\.]+\s[\+\-]+[0-9\.A-Za-z\-]+\s+>",
