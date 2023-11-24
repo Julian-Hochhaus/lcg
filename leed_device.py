@@ -43,6 +43,7 @@ class LEEDDevice:
             if self.regex_read_energy(result):
                 match = re.search(r'\b\d+\.\d+(?=\s|$)', result)
                 if match:
+                    print(match.group())
                     return float(match.group())  # Returning the matched float value
                 else:
                     return "No matching decimal number found in the result."
@@ -54,7 +55,7 @@ class LEEDDevice:
             return str(ve)
     def regex_read_energy(self, input_text):
         pattern = re.compile(
-            r"[A-Za-z]+\s+[A-Za-z]+\s+\++\d\b\s\+[0-9\.]+\s+\+[0-9\.]+\s+\+[0-9\.]+\s\++[0-9\.A-Za-z\-]+\s+>",
+            r"[A-Za-z]+\s+[A-Za-z]+\s+\++\d\b\s\+[0-9\.]+\s+\+[0-9\.]+\s+\+[0-9\.]+\s[\+\-]+[0-9\.A-Za-z\-]+\s+>",
             re.IGNORECASE)
         return pattern.match(input_text)
     def send_command(self, command):

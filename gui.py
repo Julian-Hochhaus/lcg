@@ -10,12 +10,14 @@ from tkinter import ttk
 import toml
 import os
 import csv
-import re
-from socket import *
+from bisect import bisect_left
 import subprocess
 import tkinter.filedialog as filedialog
+
 script_directory = os.path.dirname(os.path.abspath(__file__))
 settings_window = None
+
+
 def list_available_cameras():
     cameras = []
     index = 0
@@ -39,25 +41,27 @@ def list_available_cameras():
 
 class LCGApp:
     def __init__(self, root, camera_index, camera_list):
+        self.approx_exposure = []
+        self.approx_gain = []
+        self.capture_step = 0
         self.root = root
         self.root.title("Camera GUI")
         self.root.geometry("1400x1020")
         self.root.maxsize(width=1920, height=1100)
 
-
-        #self.last_saved_image_label.pack(side="right")
-        #initialisation of all values
+        # self.last_saved_image_label.pack(side="right")
+        # initialisation of all values
         self.available_cameras = camera_list
         self.camera_index = camera_index  # Store initial camera index
         self.resolutions = self.load_resolutions()
-        self.selected_resolution='640x480'
+        self.selected_resolution = '640x480'
         self.brightness = 100
         self.gain = 100
-        self.exposure_time=0.5
+        self.exposure_time = 0.5
         self.boolean_auto_exposure = tk.BooleanVar()
         self.auto_exposure_value = 1
         self.boolean_auto_gain = tk.BooleanVar()
-        self.auto_gain_value=0
+        self.auto_gain_value = 0
         self.set_exposure_time_absolute(self.exposure_time)
         self.calibration_file = script_directory + '/calibrations/calibration.csv'
 
@@ -69,22 +73,26 @@ class LCGApp:
         # Place the live stream and last saved image on the Canvas
         self.video_label = tk.Label(self.videoframes, text="Livefeed")
 
-
-
-        self.livefeed_window=self.videoframes.create_window(self.videoframes.winfo_width()//4, self.videoframes.winfo_height()/2, window=self.video_label, anchor=tk.CENTER)
+        self.livefeed_window = self.videoframes.create_window(self.videoframes.winfo_width() // 4,
+                                                              self.videoframes.winfo_height() / 2,
+                                                              window=self.video_label, anchor=tk.CENTER)
         x1, y1, _, _ = self.videoframes.bbox(self.livefeed_window)
-        self.videoframes.create_rectangle(x1 +self.video_label.winfo_reqwidth()// 2- 320,
-                                          y1+self.video_label.winfo_reqheight()// 2 - 240,
-                                          x1+self.video_label.winfo_reqwidth()// 2 + 320,
-                                          y1+self.video_label.winfo_reqheight()// 2 + 240,fill="grey95", outline="black")
+        self.videoframes.create_rectangle(x1 + self.video_label.winfo_reqwidth() // 2 - 320,
+                                          y1 + self.video_label.winfo_reqheight() // 2 - 240,
+                                          x1 + self.video_label.winfo_reqwidth() // 2 + 320,
+                                          y1 + self.video_label.winfo_reqheight() // 2 + 240, fill="grey95",
+                                          outline="black")
         self.last_saved_image_label = tk.Label(self.videoframes, text="Last Saved Image")
-        self.last_saved_image_label_window=self.videoframes.create_window(self.videoframes.winfo_width()*3//4, self.videoframes.winfo_height()/2, window=self.last_saved_image_label,  anchor=tk.CENTER)
+        self.last_saved_image_label_window = self.videoframes.create_window(self.videoframes.winfo_width() * 3 // 4,
+                                                                            self.videoframes.winfo_height() / 2,
+                                                                            window=self.last_saved_image_label,
+                                                                            anchor=tk.CENTER)
         x2, y2, _, _ = self.videoframes.bbox(self.last_saved_image_label_window)
-        self.videoframes.create_rectangle(x2 +self.last_saved_image_label.winfo_reqwidth()// 2- 320,
-                                          y2+self.last_saved_image_label.winfo_reqheight()// 2 - 240,
-                                          x2+self.last_saved_image_label.winfo_reqwidth()// 2 + 320,
-                                          y2+self.last_saved_image_label.winfo_reqheight()// 2 + 240,fill="grey95", outline="black")
-
+        self.videoframes.create_rectangle(x2 + self.last_saved_image_label.winfo_reqwidth() // 2 - 320,
+                                          y2 + self.last_saved_image_label.winfo_reqheight() // 2 - 240,
+                                          x2 + self.last_saved_image_label.winfo_reqwidth() // 2 + 320,
+                                          y2 + self.last_saved_image_label.winfo_reqheight() // 2 + 240, fill="grey95",
+                                          outline="black")
 
         self.camera = CameraDevice(self.camera_index)
 
@@ -124,7 +132,7 @@ class LCGApp:
 
         button_width = 25
 
-        self.info_label = tk.Label(self.info_frame, text="Stream Info:", font=label_font,width=25)
+        self.info_label = tk.Label(self.info_frame, text="Stream Info:", font=label_font, width=25)
         self.info_label.pack()
         self.stream_status_label = tk.Label(self.info_frame, text="Stream Status: Stopped", fg="red")
         self.stream_status_label.pack(side="top", pady=5)
@@ -140,7 +148,7 @@ class LCGApp:
         self.device_label = tk.Label(self.leed_settings_frame, text="LEED Control:", width=25, font=label_font)
         self.device_label.pack()
 
-        leed_test_frame=tk.Frame(self.leed_settings_frame)
+        leed_test_frame = tk.Frame(self.leed_settings_frame)
         leed_test_frame.pack()
         leed_command_frame = tk.Frame(leed_test_frame)
         leed_command_frame.pack()
@@ -150,24 +158,25 @@ class LCGApp:
         self.command_entry = tk.Entry(leed_command_frame)
         self.command_entry.pack(side=tk.LEFT)
 
-        self.set_energy_button = tk.Button(leed_command_frame, text="Set energy", command=self.set_energy, font=button_font)
+        self.set_energy_button = tk.Button(leed_command_frame, text="Set energy", command=self.set_energy,
+                                           font=button_font)
         self.set_energy_button.pack(side=tk.LEFT)
         leed_test_output = tk.Frame(leed_test_frame)
         leed_test_output.pack()
         result_frame = tk.Frame(leed_test_output, bd=2, relief=tk.RAISED, bg="grey65")
         result_frame.pack()
 
-        self.result_label_terminal = tk.Label(result_frame, text="LEED Device Output", bg="grey70", fg="black", font=("Courier", 12, 'bold'), width=50,
-                                    height=1, anchor="nw")
+        self.result_label_terminal = tk.Label(result_frame, text="LEED Device Output", bg="grey70", fg="black",
+                                              font=("Courier", 12, 'bold'), width=50,
+                                              height=1, anchor="nw")
         self.result_label_terminal.pack(side=tk.TOP)
 
         output_frame = tk.Frame(result_frame, bd=2, relief=tk.SUNKEN, bg="black")
         output_frame.pack()
 
         self.result_label = tk.Label(output_frame, text=">", bg="grey40", fg="white", font=("Courier", 12), width=50,
-                                    height=5, anchor="nw")
+                                     height=5, anchor="nw")
         self.result_label.pack()
-
 
         self.info_cam_label = tk.Label(self.camera_settings_frame, text="Camera control:", font=label_font, width=25)
         self.info_cam_label.pack()
@@ -181,11 +190,11 @@ class LCGApp:
                                         command=self.capture_photo, width=button_width, font=button_font)
         self.capture_button.pack()
 
-        frame_save_directory=tk.Frame(self.camera_settings_frame)
+        frame_save_directory = tk.Frame(self.camera_settings_frame)
         frame_save_directory.pack()
         self.current_save_directory = tk.Label(frame_save_directory, text="Save Directory:")
         self.current_save_directory.pack(side=tk.LEFT)
-        self.save_directory=script_directory
+        self.save_directory = script_directory
         self.save_directory_text = tk.Text(frame_save_directory, wrap=tk.WORD, height=1, width=25)
         self.save_directory_text.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.save_directory_text.insert(tk.END, self.save_directory)
@@ -194,11 +203,11 @@ class LCGApp:
         self.select_directory_button = tk.Button(self.camera_settings_frame, text="Select Save Directory",
                                                  command=self.select_directory, width=button_width, font=button_font)
         self.select_directory_button.pack()
-        frame_series=tk.Frame(self.camera_settings_frame, bd=2, relief=tk.RIDGE)
+        frame_series = tk.Frame(self.camera_settings_frame, bd=2, relief=tk.RIDGE)
         frame_series.pack()
         label_series = tk.Label(frame_series, text='Settings Serie:')
         label_series.pack()
-        image_series_frame=tk.Frame(frame_series)
+        image_series_frame = tk.Frame(frame_series)
         image_series_frame.pack()
         image_series_subframe1 = tk.Frame(frame_series)
         image_series_subframe1.pack()
@@ -206,16 +215,17 @@ class LCGApp:
         image_series_subframe2.pack()
         image_series_subframe3 = tk.Frame(frame_series)
         image_series_subframe3.pack()
-        self.confirm_settings_button = tk.Button(frame_series, text="Confirm Settings",command=self.confirm_settings,
+        self.confirm_settings_button = tk.Button(frame_series, text="Confirm Settings", command=self.confirm_settings,
                                                  width=button_width, font=button_font)
         self.confirm_settings_button.pack()
-        self.label_series_confirm=tk.Label(frame_series, text='Series will be recorded with:\n', bg='grey95', fg='black', height=3, anchor='nw')
+        self.label_series_confirm = tk.Label(frame_series, text='Series will be recorded with:\n', bg='grey95',
+                                             fg='black', height=4, anchor='nw')
         self.label_series_confirm.pack()
         start_energy_label = tk.Label(image_series_subframe1, text="Start Energy (eV):", font=label_font)
         start_energy_label.pack(side=tk.LEFT)
         self.start_energy_valid = tk.Label(image_series_subframe1, text="Invalid", fg="red")
         self.start_energy_valid.pack(side=tk.RIGHT)
-        self.start_energy_entry=tk.Entry(image_series_subframe1)
+        self.start_energy_entry = tk.Entry(image_series_subframe1)
         self.start_energy_entry.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
         end_energy_label = tk.Label(image_series_subframe2, text=" End Energy (eV):", font=label_font)
@@ -231,8 +241,8 @@ class LCGApp:
         self.step_energy_valid = tk.Label(image_series_subframe3, text="Invalid", fg="red")
         self.step_energy_valid.pack(side=tk.RIGHT)
         self.step_energy_entry = tk.Entry(image_series_subframe3)
-        self.step_energy_entry.pack(side=tk.RIGHT,fill=tk.BOTH, expand=True)
-        frame_calibration_file=tk.Frame(frame_series)
+        self.step_energy_entry.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        frame_calibration_file = tk.Frame(frame_series)
         frame_calibration_file.pack()
         self.current_calibration_file = tk.Label(frame_calibration_file, text="Calibration File:")
         self.current_calibration_file.pack(side=tk.LEFT)
@@ -243,8 +253,8 @@ class LCGApp:
         self.calibration_file_text.bind("<FocusOut>", self.check_file_exists)
         self.boolean_use_calibration_file = tk.BooleanVar()
         self.boolean_use_calibration_file.set(False)
-        self.boolean_use_calibration_checkbox= tk.Checkbutton(frame_calibration_file, text="Use calibration file",
-                                                     var=self.boolean_use_calibration_file)
+        self.boolean_use_calibration_checkbox = tk.Checkbutton(frame_calibration_file, text="Use calibration file",
+                                                               var=self.boolean_use_calibration_file)
         self.boolean_use_calibration_checkbox.pack()
         self.select_calibration_file_button = tk.Button(frame_series, text="Select Calibration File",
                                                         command=self.select_calibration_file)
@@ -252,7 +262,6 @@ class LCGApp:
         self.start_energy_entry.bind("<FocusOut>", self.validate_start_energy)
         self.end_energy_entry.bind("<FocusOut>", self.validate_end_energy)
         self.step_energy_entry.bind("<FocusOut>", self.validate_step_energy)
-
 
         self.start_capture_button = tk.Button(self.camera_settings_frame, text="Start Image Capture Loop",
                                               command=lambda: self.capture_images_loop(), width=button_width,
@@ -262,18 +271,16 @@ class LCGApp:
         self.load_camera_settings()
 
         # Socket configuration for the LEED
-        self.leed_device=LEEDDevice(leed_host='129.217.168.64', leed_port=4004)
+        self.leed_device = LEEDDevice(leed_host='129.217.168.64', leed_port=4004)
         self.load_leed_settings()
 
         self.root.protocol("WM_DELETE_WINDOW", self.close_app)
 
     def check_file_exists(self, event):
-        if event.widget==self.calibration_file_text:
-            print('test')
+        if event.widget == self.calibration_file_text:
             new_file_path = self.calibration_file_text.get("1.0", "end-1c").strip()
-        if event.widget==self.calibration_file_text_config:
-            print('tett')
-            new_file_path=self.calibration_file_text_config.get("1.0", "end-1c").strip()
+        if event.widget == self.calibration_file_text_config:
+            new_file_path = self.calibration_file_text_config.get("1.0", "end-1c").strip()
         if os.path.isfile(new_file_path):
             self.calibration_file = new_file_path
             self.calibration_file_text.delete(1.0, tk.END)
@@ -287,6 +294,7 @@ class LCGApp:
             self.calibration_file_text_config.delete(1.0, tk.END)
             self.calibration_file_text.insert(tk.END, self.calibration_file)
             self.calibration_file_text_config.insert(tk.END, self.calibration_file)
+
     def check_directory(self, event):
         new_directory = self.save_directory_text.get("1.0", "end-1c")
         if os.path.isdir(new_directory):
@@ -296,8 +304,20 @@ class LCGApp:
             print("Invalid directory. Reverting to last saved one.")
             self.save_directory_text.delete("1.0", tk.END)
             self.save_directory_text.insert(tk.END, self.save_directory)
+
     def confirm_settings(self):
-        print('test')
+        if self.start_energy_valid.cget('text') == 'Valid' and self.end_energy_valid.cget(
+                'text') == 'Valid' and self.step_energy_valid.cget('text') == 'Valid':
+            start = float(self.start_energy_entry.get())
+            end = float(self.end_energy_entry.get())
+            step = float(self.step_energy_entry.get())
+            lenght = (end - start) // step + 1
+            text = f'LEED Series will be recorded in:\n {lenght} steps @{step} eV\n from {start} eV to {end} eV.\n To start the Series Capture, press:\n \'Start Image Capture Loop\' '
+
+        else:
+            text = 'Please check, that all given energy values are valid floats!'
+        self.label_series_confirm.config(text=text)
+
     def validate_start_energy(self, event):
         new_value = self.start_energy_entry.get()
         if self.is_float(new_value):
@@ -326,6 +346,7 @@ class LCGApp:
             return True
         except ValueError:
             return False
+
     def display_last_saved_image(self, frame):
         # Update the label to display the last saved image
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -345,22 +366,79 @@ class LCGApp:
         self.last_saved_image_label.config(image=img)
         self.last_saved_image_label.image = img  # Keep a reference to prevent garbage collection
 
-    def capture_images_loop(self, start_energy=10, end_energy=100, increment=9):
+    def capture_images_loop(self):
         self.select_directory()
-        self.capture_energy_image(start_energy, end_energy, increment)
+        if self.start_energy_valid.cget('text') == 'Valid' and self.end_energy_valid.cget(
+                'text') == 'Valid' and self.step_energy_valid.cget('text') == 'Valid':
+            start = float(self.start_energy_entry.get())
+            end = float(self.end_energy_entry.get())
+            step = float(self.step_energy_entry.get())
+            lenght = (end - start) // step + 1
+            text = f'LEED Series started with:\n {lenght} steps @{step} eV\n from {start} eV to {end} eV.\n'
 
-    def capture_energy_image(self, energy, end_energy, increment):
+        else:
+            start = 10
+            end = 100
+            step = 5
+            lenght = (end - start) // step + 1
+            text = f'Not all given energies are valid floats!\n Series started with standard values:\n {lenght} steps @{step} eV\n from {start} eV to {end} eV.\n'
+        self.label_series_confirm.config(text=text)
+        self.capture_step = 0
+        self.approx_gain, self.approx_exposure=self.precalculate_gain_and_exposure(start, end, lenght)
+        print(self.approx_gain,self.approx_exposure)
+        self.capture_energy_image(start, end, step)
+
+    def lin_interpolate(self, x, x_list, y_list):
+        i = bisect_left(x_list, x)
+
+        if i == 0:
+            return y_list[0]
+        elif i == len(x_list):
+            return y_list[-1]
+        else:
+            x0, x1 = x_list[i - 1], x_list[i]
+            y0, y1 = y_list[i - 1], y_list[i]
+            return y0 + (y1 - y0) * ((x - x0) / (x1 - x0))
+
+    def precalculate_gain_and_exposure(self, start, end, lenght):
+        energy_values = []
+        gain_values = []
+        exposure_values = []
+        with open(self.calibration_file, newline='') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                energy_values.append(float(row['Energy']))
+                gain_values.append(float(row['Gain']))
+                exposure_values.append(float(row['Exposure']))
+        min_energy = start
+        max_energy = end
+        num_points = int(lenght)
+
+        approximation_gain_array = []
+        approximation_exposure_array = []
+        for i in range(num_points):
+            energy = min_energy + ((max_energy - min_energy) / num_points) * i
+            gain = int(self.lin_interpolate(energy, energy_values, gain_values))
+            exposure = np.round(self.lin_interpolate(energy, energy_values, exposure_values),1)
+            approximation_gain_array.append(gain)
+            approximation_exposure_array.append(exposure)
+        return approximation_gain_array, approximation_exposure_array
+
+    def capture_energy_image(self, energy, end_energy, step):
         if energy <= end_energy:
-            def capture_next():
-                self.capture_energy_image(energy + increment, end_energy, increment)
 
-            # Send the command to the device
+            def capture_next():
+                self.capture_energy_image(energy + step, end_energy, step)
+
             self.leed_device.send_energy(energy)
             self.result_label.config(text=f"Result: {self.leed_device.read_energy()}")
             self.output_leed.config(text=f"Result: {self.leed_device.read_energy()}")
-            self.root.after(5000)
-            # Capture image
-            status,frame=self.camera.get_frame()
+            self.camera.set(cv2.CAP_PROP_EXPOSURE,self.approx_exposure[self.capture_step]*10000)
+            self.camera.set(cv2.CAP_PROP_GAIN, self.approx_gain[self.capture_step])
+            break_time = 1000 if self.camera.get(cv2.CAP_PROP_EXPOSURE) // 10 < 1000 else self.camera.get(
+                cv2.CAP_PROP_EXPOSURE) // 10
+            self.root.after(int(5 * break_time))  # short break depending on camera exposure time (at least 5sec!)
+            status, frame = self.camera.get_frame()
             if status:
                 file_path = self.save_directory + f'/images/EN_{energy}.jpg'
                 # Save the captured frame as an image
@@ -369,11 +447,12 @@ class LCGApp:
                 self.display_last_saved_image(frame)
             else:
                 print("Failed to capture photo")
-
-            # Schedule the next capture after a delay (10 seconds)
-            self.root.after(5000, capture_next)
+            self.capture_step += 1
+            print(self.capture_step)
+            self.root.after(int(3 * break_time), capture_next)
         else:
             print("Image capturing completed")
+
     def select_calibration_file(self):
         self.calibration_file = filedialog.askopenfilename()
         self.calibration_file_text.delete(1.0, tk.END)
@@ -381,9 +460,11 @@ class LCGApp:
         self.calibration_file_text_config.delete(1.0, tk.END)
         self.calibration_file_text_config.insert(tk.END, self.calibration_file)
         print("Calibration File:", self.calibration_file)
+
     def select_directory(self):
         self.save_directory = filedialog.askdirectory()
-        self.save_directory_text.config(text=str(self.save_directory))
+        self.save_directory_text.delete(1.0, tk.END)  # Clear existing text
+        self.save_directory_text.insert(tk.END, self.save_directory)
         print("Save directory:", self.save_directory)
 
     def set_energy(self):
@@ -396,6 +477,7 @@ class LCGApp:
         except ValueError:
             self.result_label.config(text="Invalid energy value. Please enter a valid number.")
             self.output_leed.config(text="Invalid energy value. Please enter a valid number.")
+
     def set_energy_leed(self):
         energy = self.command_energy_entry.get()
         try:
@@ -406,6 +488,7 @@ class LCGApp:
         except ValueError:
             self.result_label.config(text="Invalid energy value. Please enter a valid number.")
             self.output_leed.config(text="Invalid energy value. Please enter a valid number.")
+
     def capture_photo(self):
         status, frame = self.camera.get_frame()
         if status:
@@ -424,17 +507,19 @@ class LCGApp:
 
     def load_camera_settings(self):
         try:
-            with open(script_directory+'/ccd_config.toml', 'r') as config_file:
+            with open(script_directory + '/ccd_config.toml', 'r') as config_file:
                 config = toml.load(config_file)
                 self.camera_index = config.get('CameraSettings', {}).get('camera_index')
-                self.selected_resolution=config.get('CameraSettings', {}).get('initial_resolution')
+                self.selected_resolution = config.get('CameraSettings', {}).get('initial_resolution')
                 self.brightness = config.get('CameraSettings', {}).get('brightness')
                 self.gain = config.get('CameraSettings', {}).get('gain')
-                self.auto_gain_value =0 if not config.get('CameraSettings', {}).get('gain_auto') else 1
-                self.boolean_auto_gain.set(True) if config.get('CameraSettings', {}).get('gain_auto') else self.boolean_auto_gain.set(False)
+                self.auto_gain_value = 0 if not config.get('CameraSettings', {}).get('gain_auto') else 1
+                self.boolean_auto_gain.set(True) if config.get('CameraSettings', {}).get(
+                    'gain_auto') else self.boolean_auto_gain.set(False)
                 self.auto_exposure_value = 1 if not config.get('CameraSettings', {}).get('exposure_auto') else 3
-                self.boolean_auto_exposure.set(True) if config.get('CameraSettings', {}).get('exposure_auto') else self.boolean_auto_exposure.set(False)
-                self.exposure_time=config.get('CameraSettings', {}).get('exposure_time')
+                self.boolean_auto_exposure.set(True) if config.get('CameraSettings', {}).get(
+                    'exposure_auto') else self.boolean_auto_exposure.set(False)
+                self.exposure_time = config.get('CameraSettings', {}).get('exposure_time')
 
         except FileNotFoundError:
             print('Settings File not found.')
@@ -450,7 +535,7 @@ class LCGApp:
     def load_resolutions(self):
         resolutions = {}
         try:
-            with open(script_directory+'/ccd_config.toml', 'r') as config_file:
+            with open(script_directory + '/ccd_config.toml', 'r') as config_file:
                 config = toml.load(config_file)
                 resolutions = config.get('CameraSettings', {}).get('resolutions')
         except FileNotFoundError as e:
@@ -458,9 +543,10 @@ class LCGApp:
         except Exception as e:
             print('Error loading resolutions:', e)
         return resolutions
+
     def save_camera_settings(self):
         # Read existing configuration
-        with open(script_directory+'/ccd_config.toml', 'r') as config_file:
+        with open(script_directory + '/ccd_config.toml', 'r') as config_file:
             config = toml.load(config_file)
 
         # Update specific settings
@@ -472,30 +558,32 @@ class LCGApp:
         config['CameraSettings']['exposure_time'] = self.exposure_time
         config['CameraSettings']['exposure_auto'] = self.boolean_auto_exposure.get()
         # Rewrite the updated settings back to the file
-        with open(script_directory+'/ccd_config.toml', 'w') as config_file:
+        with open(script_directory + '/ccd_config.toml', 'w') as config_file:
             toml.dump(config, config_file)
 
     def load_leed_settings(self):
         try:
-            with open(script_directory+'/ccd_config.toml', 'r') as config_file:
+            with open(script_directory + '/ccd_config.toml', 'r') as config_file:
                 config = toml.load(config_file)
-                host=config.get('LEEDSettings',{}).get('server_host')
+                host = config.get('LEEDSettings', {}).get('server_host')
                 port = config.get('LEEDSettings', {}).get('server_port')
         except FileNotFoundError:
             host = "129.217.168.64"
             port = 4004
         self.leed_server_host_text.set(host)
         self.leed_server_port_text.set(port)
+
     def save_leed_settings(self):
-        with open(script_directory+'/ccd_config.toml', 'r') as config_file:
+        with open(script_directory + '/ccd_config.toml', 'r') as config_file:
             config = toml.load(config_file)
         if self.leed_device.validate_leed_ip(self.leed_server_host_text.get()):
             config['LEEDSettings']['server_host'] = self.leed_server_host_text.get()
             config['LEEDSettings']['server_port'] = self.leed_server_port_text.get()
         else:
             print('Current configuration does not contain a valid IP, therefore it was not saved.')
-        with open(script_directory+'/ccd_config.toml', 'w') as config_file:
+        with open(script_directory + '/ccd_config.toml', 'w') as config_file:
             toml.dump(config, config_file)
+
     def video_capture_thread(self):
         while not self.stop_event.is_set():
             status, frame = self.camera.get_frame()
@@ -518,8 +606,8 @@ class LCGApp:
             actual_width = self.camera.get(cv2.CAP_PROP_FRAME_WIDTH)
             actual_height = self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT)
             # Calculate the ratio to maintain a minimum height of 480 pixels
-            ratio = float(actual_width/ actual_height)
-            new_width = int(480* ratio)
+            ratio = float(actual_width / actual_height)
+            new_width = int(480 * ratio)
             new_height = int(480)
 
             # Resize the frame while maintaining the aspect ratio
@@ -532,7 +620,6 @@ class LCGApp:
                 pass
 
         self.q.put(None)  # Signal the end of the video capture
-
 
     def update_video(self):
         try:
@@ -563,6 +650,7 @@ class LCGApp:
     def on_settings_window_close(self):
         global settings_window
         settings_window.withdraw()  # Hide the window instead of closing it
+
     def initialize_settings_frame(self):
         global settings_window
 
@@ -671,10 +759,8 @@ class LCGApp:
         self.leed_server_host_entry.bind("<FocusOut>", self.validate_leed_ip)
         self.leed_server_port_text.trace("w", self.on_leed_server_port_change)
 
-
-
-
-        leed_test_frame=tk.Frame(leed_settings_frame, bd=2, bg='grey85',highlightthickness=1, highlightbackground="black")
+        leed_test_frame = tk.Frame(leed_settings_frame, bd=2, bg='grey85', highlightthickness=1,
+                                   highlightbackground="black")
         leed_test_frame.pack()
         leed_energy_frame = tk.Frame(leed_test_frame)
         leed_energy_frame.pack()
@@ -686,7 +772,7 @@ class LCGApp:
 
         set_energy_button = tk.Button(leed_energy_frame, text="Set energy", command=self.set_energy_leed)
         set_energy_button.pack(side=tk.LEFT)
-        leed_command_frame=tk.Frame(leed_test_frame)
+        leed_command_frame = tk.Frame(leed_test_frame)
         leed_command_frame.pack()
         label = tk.Label(leed_command_frame, text='Command:(Format: CMD)\n*don\'t include \\r!*')
         label.pack(side=tk.LEFT)
@@ -696,14 +782,14 @@ class LCGApp:
 
         test_command_button = tk.Button(leed_command_frame, text="Send command", command=self.send_cmd_leed)
         test_command_button.pack(side=tk.LEFT)
-        leed_test_output=tk.Frame(leed_test_frame)
+        leed_test_output = tk.Frame(leed_test_frame)
         leed_test_output.pack()
         result_frame = tk.Frame(leed_test_output, bd=2, relief=tk.RAISED, bg="grey65")
         result_frame.pack()
 
         self.result_label_config_terminal = tk.Label(result_frame, text="LEED Device Output", bg="grey70", fg="black",
-                                     font=("Courier", 12, 'bold'), width=50,
-                                     height=1, anchor="nw")
+                                                     font=("Courier", 12, 'bold'), width=50,
+                                                     height=1, anchor="nw")
         self.result_label_config_terminal.pack(side=tk.TOP)
 
         output_frame = tk.Frame(result_frame, bd=2, relief=tk.SUNKEN, bg="black")
@@ -725,12 +811,13 @@ class LCGApp:
         calibration_settings_frame = tk.Frame(settings_window, bd=2, relief=tk.RIDGE, bg='grey85')
         calibration_settings_frame.pack()
         tk.Label(calibration_settings_frame, text="Calibration Settings:", font=('Arial', 12, 'bold')).pack()
-        self.output_calibration = tk.Text(calibration_settings_frame, bg="grey95", fg="grey20", font=("Courier", 11), width=50,
-                                    height=5)
+        self.output_calibration = tk.Text(calibration_settings_frame, bg="grey95", fg="grey20", font=("Courier", 11),
+                                          width=50,
+                                          height=5)
         self.output_calibration.pack()
-        self.calibration_values=[]
+        self.calibration_values = []
 
-        frame_calibration_file_config=tk.Frame(calibration_settings_frame)
+        frame_calibration_file_config = tk.Frame(calibration_settings_frame)
         frame_calibration_file_config.pack()
         current_calibration_file = tk.Label(frame_calibration_file_config, text="Calibration File:")
         current_calibration_file.pack(side=tk.LEFT)
@@ -738,48 +825,53 @@ class LCGApp:
         self.calibration_file_text_config.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.calibration_file_text_config.insert(tk.END, self.calibration_file)
         self.calibration_file_text_config.bind("<FocusOut>", self.check_file_exists)
-        calibration_buttons_frame=tk.Frame(calibration_settings_frame)
+        calibration_buttons_frame = tk.Frame(calibration_settings_frame)
         calibration_buttons_frame.pack()
         set_calibration_button = tk.Button(calibration_buttons_frame, text="Add Calibration\n datapoint",
-                                     command=self.add_calibration_datapoint)
+                                           command=self.add_calibration_datapoint)
         set_calibration_button.pack(side=tk.LEFT)
         reset_calibration_button = tk.Button(calibration_buttons_frame, text="Reset temporary\n Calibration",
-                                     command=self.reset_calibration_values)
+                                             command=self.reset_calibration_values)
         reset_calibration_button.pack(side=tk.LEFT)
         save_calibration_button = tk.Button(calibration_buttons_frame, text="Save calibration\n to file",
-                                     command=self.save_calibration_values)
+                                            command=self.save_calibration_values)
         save_calibration_button.pack(side=tk.LEFT)
 
     def add_calibration_datapoint(self):
-        energy=np.round(self.leed_device.read_energy(),0)
-        gain=self.camera.get(cv2.CAP_PROP_GAIN)
+        energy = self.leed_device.read_energy()
+        gain = self.camera.get(cv2.CAP_PROP_GAIN)
+        exposure_time_in_s = self.camera.get(cv2.CAP_PROP_EXPOSURE) // 10000
         for index, entry in enumerate(self.calibration_values):
             if entry[0] == energy:
-                self.calibration_values[index] = (energy, gain)
+                self.calibration_values[index] = (energy, gain, exposure_time_in_s)
                 break
         else:
-            self.calibration_values.append((energy, gain))
+            self.calibration_values.append((energy, gain, exposure_time_in_s))
 
         self.calibration_values = sorted(self.calibration_values, key=lambda x: x[0])
 
         self.output_calibration.delete("1.0", "end")
         for entry in self.calibration_values:
             self.output_calibration.insert("end", f"{entry}\n")
+
     def reset_calibration_values(self):
-        self.calibration_values=[]
+        self.calibration_values = []
         self.output_calibration.delete("1.0", "end")
+
     def save_calibration_values(self):
         self.select_calibration_file()
         filename = self.calibration_file
         with open(filename, mode='w', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow(['Energy', 'Gain'])
+            writer.writerow(['Energy (eV)', 'Gain', 'Exposure (s)'])
             writer.writerows(self.calibration_values)
         print(f'Calibration saved to:{self.calibration_file}')
         self.output_calibration.delete("1.0", "end")
-        self.output_calibration.insert('end', f'Calibration saved to:{self.calibration_file}\n Temporary calibration still available! Current values:')
+        self.output_calibration.insert('end',
+                                       f'Calibration saved to:{self.calibration_file}\n Temporary calibration still available! Current values:')
         for entry in self.calibration_values:
             self.output_calibration.insert("end", f"{entry}\n")
+
     def send_cmd_leed(self):
         cmd = f'{str(self.entry_test_command.get())}\r'
         result = self.leed_device.send_command(command=cmd)
@@ -788,27 +880,27 @@ class LCGApp:
 
     def on_leed_server_port_change(self, *args):
         self.validate_leed_ip()
+
     def validate_leed_ip(self, *args):
         ip_address = self.leed_server_host_entry.get()
         self.leed_device.validate_leed_ip(ip_address=ip_address)
         if self.leed_device.valid_ip:
-            if not self.leed_device.leed_host==ip_address:
+            if not self.leed_device.leed_host == ip_address:
                 self.leed_device.change_ip_address(new_ip=ip_address)
             self.validity_label.config(text="Valid IP", fg="green")
         else:
             self.validity_label.config(text="Invalid IP", fg="red")
 
-
     def clicked_load_settings(self):
         self.load_camera_settings()
         self.load_leed_settings()
         self.update_settings()
+
     def set_brightness(self, value):
         self.brightness = float(value)
 
     def set_exposure_time_absolute(self, value):
-        self.exposure_time_absolute= 10000*float(value)
-
+        self.exposure_time_absolute = 10000 * float(value)
 
     def set_gain(self, value):
         self.gain = float(value)
@@ -816,8 +908,8 @@ class LCGApp:
     # Function to set gain_auto using subprocess
     def set_auto_gain(self, camera_index, auto_gain_value):
         try:
-            device='/dev/video'+str(camera_index)
-            value= '--set-ctrl=gain_auto='+str(auto_gain_value)
+            device = '/dev/video' + str(camera_index)
+            value = '--set-ctrl=gain_auto=' + str(auto_gain_value)
             subprocess.run(['v4l2-ctl', '--device', device, value])
         except subprocess.CalledProcessError as e:
             print(f"Error setting gain to {auto_gain_value}: {e}")
@@ -840,6 +932,7 @@ class LCGApp:
             self.camera_index = new_camera_index
             self.set_auto_gain(self.camera_index, self.auto_gain_value)
             self.update_settings()  # Apply the new camera settings
+
     def update_settings(self):
         selected_width, selected_height = self.resolutions[self.selected_resolution]
         try:
@@ -880,6 +973,7 @@ class LCGApp:
 
         except ValueError:
             print("Please enter valid integers for width and height.")
+
     def update_settings_camera_ui(self):
         self.camera_combobox.current(self.camera_index)
         if self.selected_resolution in self.resolutions:
@@ -888,20 +982,23 @@ class LCGApp:
         self.brightness_scale.set(self.brightness)
         self.gain_scale.set(self.gain)
         self.exposure_time_entry.set(self.exposure_time)
-        self.boolean_auto_gain.set(True) if self.auto_gain_value==1 else self.boolean_auto_gain.set(False)
+        self.boolean_auto_gain.set(True) if self.auto_gain_value == 1 else self.boolean_auto_gain.set(False)
         self.boolean_auto_exposure.set(True) if self.auto_exposure_value == 3 else self.boolean_auto_exposure.set(False)
+
+
 def main():
     try:
         cameras = list_available_cameras()
         camera_index = int(input("Enter the camera index to use: "))
-        with open(script_directory+'/ccd_config.toml', 'r') as config_file:
+        with open(script_directory + '/ccd_config.toml', 'r') as config_file:
             config = toml.load(config_file)
-        if config.get('CameraSettings', {}).get('camera_index')!=camera_index:
+        if config.get('CameraSettings', {}).get('camera_index') != camera_index:
             print('The choosen camera differs from the settings in the config file.')
-            camera_idx=int(input('Please confirm by entering the camera index you wish to use again to overwrite the settings in the config file:'))
-            config['CameraSettings']['camera_index']=camera_idx
-            camera_index=camera_idx
-        with open(script_directory+'/ccd_config.toml', 'w') as config_file:
+            camera_idx = int(input(
+                'Please confirm by entering the camera index you wish to use again to overwrite the settings in the config file:'))
+            config['CameraSettings']['camera_index'] = camera_idx
+            camera_index = camera_idx
+        with open(script_directory + '/ccd_config.toml', 'w') as config_file:
             toml.dump(config, config_file)
         if camera_index < len(cameras):
             root = tk.Tk()
@@ -912,6 +1009,7 @@ def main():
             print("Selected camera index is not available.")
     except ValueError:
         print("Please enter a valid camera index (an integer).")
+
 
 if __name__ == "__main__":
     main()
