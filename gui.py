@@ -119,8 +119,12 @@ class LCGApp:
         self.device_settings_frame.pack()
 
         # LEED Settings Frame
-        self.leed_settings_frame = tk.Frame(self.device_settings_frame, bd=2, relief=tk.RIDGE)
-        self.leed_settings_frame.pack(side='left')
+        self.leed_device_frame=tk.Frame(self.device_settings_frame, bd=2, relief=tk.RIDGE)
+        self.leed_device_frame.pack(side='left')
+        self.leed_info_frame = tk.Frame(self.leed_device_frame, bd=2, relief=tk.RIDGE)
+        self.leed_info_frame.pack()
+        self.leed_settings_frame = tk.Frame(self.leed_device_frame, bd=2, relief=tk.RIDGE)
+        self.leed_settings_frame.pack()
 
         # Camera Settings Frame
         self.camera_settings_frame = tk.Frame(self.device_settings_frame, bd=2, relief=tk.RIDGE)
@@ -144,7 +148,13 @@ class LCGApp:
 
         self.frame_rate_label = tk.Label(self.info_frame, text="Frame Rate: ", font=label_font)
         self.frame_rate_label.pack()
+        self.leed_info_frame_label = tk.Label(self.leed_info_frame, text="LEED Info:", width=25, font=label_font)
+        self.leed_info_frame_label.pack()
+        self.screen_label = tk.Label(self.leed_info_frame, text="SCREEN state: N/A")
+        self.screen_label.pack()
 
+        self.cathode_label = tk.Label(self.leed_info_frame, text="Cathode state: N/A")
+        self.cathode_label.pack()
         self.device_label = tk.Label(self.leed_settings_frame, text="LEED Control:", width=25, font=label_font)
         self.device_label.pack()
 
@@ -273,8 +283,24 @@ class LCGApp:
         # Socket configuration for the LEED
         self.leed_device = LEEDDevice(leed_host='129.217.168.64', leed_port=4004)
         self.load_leed_settings()
+        self.update_leed_states()
 
         self.root.protocol("WM_DELETE_WINDOW", self.close_app)
+
+    def update_leed_states(self):
+        # Read SCREEN state
+        screen_state, screen_result = self.leed_device.read_screen()
+        if screen_state:
+            self.screen_label.config(text=f"SCREEN state: ON: {screen_result/1000}kV", fg="green", font=("Arial", 12))
+        else:
+            self.screen_label.config(text=f"SCREEN state: OFF", fg="red", font=("Arial", 12))
+
+            # Read Cathode state
+        cathode_state, cathode_result = self.leed_device.read_cathode()
+        if cathode_state:
+            self.cathode_label.config(text=f"Cathode state: ON: {cathode_result}A", fg="green", font=("Arial", 12))
+        else:
+            self.cathode_label.config(text=f"Cathode state: OFF", fg="red", font=("Arial", 12))
 
     def check_file_exists(self, event):
         if event.widget == self.calibration_file_text:
@@ -430,6 +456,7 @@ class LCGApp:
             def capture_next():
                 self.capture_energy_image(energy + step, end_energy, step)
 
+            self.update_leed_states()
             self.leed_device.send_energy(energy)
             self.result_label.config(text=f"Result: {self.leed_device.read_energy()}")
             self.output_leed.config(text=f"Result: {self.leed_device.read_energy()}")
@@ -479,6 +506,7 @@ class LCGApp:
         energy = self.command_entry.get()
         try:
             energy_float = float(energy)
+            self.update_leed_states()
             result = self.leed_device.send_energy(energy_float)
             self.result_label.config(text=f"{result}")
             self.output_leed.config(text=f"{result}")
@@ -490,6 +518,7 @@ class LCGApp:
         energy = self.command_energy_entry.get()
         try:
             energy_float = float(energy)
+            self.update_leed_states()
             result = self.leed_device.send_energy(energy_float)
             self.result_label.config(text=f"{result}")
             self.output_leed.config(text=f"{result}")
@@ -851,6 +880,7 @@ class LCGApp:
         save_calibration_button.pack(side=tk.LEFT)
 
     def add_calibration_datapoint(self):
+        self.update_leed_states()
         energy = self.leed_device.read_energy()
         if energy is None:
             print("Failed to retrieve a valid energy value. Please try again.")
@@ -893,6 +923,7 @@ class LCGApp:
         result = self.leed_device.send_command(command=cmd)
         self.output_leed.config(text=result)
         self.result_label.config(text=result)
+        self.update_leed_states()
 
     def on_leed_server_port_change(self, *args):
         self.validate_leed_ip()

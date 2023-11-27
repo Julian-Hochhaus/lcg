@@ -36,6 +36,29 @@ class LEEDDevice:
             return result
         except OSError:
             return f"Error setting energy."
+    def read_screen(self):
+        try:
+            command = f'RSC\r'
+            result=self.send_command(command)
+            print(result)
+            if self.regex_prop_off(result):
+                return False, result
+            else:
+                return True, self.regex_prop_actual_value(result)
+        except OSError:
+            return f"Error reading SCREEN state."
+
+    def read_cathode(self):
+        try:
+            command = f'RCA\r'
+            result = self.send_command(command)
+
+            if self.regex_prop_off(result):
+                return False, result
+            else:
+                return True, self.regex_prop_actual_value(result)
+        except OSError as e:
+            return f"Error reading Cathode state: {str(e)}"
     def read_energy(self):
         max_attempts = 3
         attempts = 0
@@ -66,6 +89,23 @@ class LEEDDevice:
             r"[A-Za-z]+\s+[A-Za-z]+\s+\++\d\b\s\+[0-9\.]+\s+\+[0-9\.]+\s+\+[0-9\.]+\s[\+\-]+[0-9\.A-Za-z\-]+\s+>",
             re.IGNORECASE)
         return pattern.match(input_text)
+    def regex_prop_off(self, input_text):
+        pattern = re.compile(
+            r"[A-Za-z]+\s+[A-Za-z]+\s+off",
+            re.IGNORECASE)
+        return pattern.match(input_text)
+
+    def regex_prop_actual_value(self,input_text):
+        pattern = re.compile(r'[\+\-](?:[^\d]*(\d*[\.\d]*|[\d]*[\.\d]*|[\d]*)){3}\s*\+\d+[\.\d]*|\d+')
+        match = pattern.search(input_text)
+        if match:
+            matched_sequence = match.group(0)
+            numbers = re.findall(r'[+-]?\d+\.\d+|\d+', matched_sequence)
+            return float(numbers[2])
+        else:
+            raise ValueError("No matching sequence found in the input text.")
+
+
     def send_command(self, command):
         try:
             self.device_socket.send(command.encode())
