@@ -18,6 +18,7 @@ script_directory = os.path.dirname(os.path.abspath(__file__))
 settings_window = None
 __version__ = "0.1.1"
 
+
 def list_available_cameras():
     cameras = []
     index = 0
@@ -119,7 +120,7 @@ class LCGApp:
         self.device_settings_frame.pack()
 
         # LEED Settings Frame
-        self.leed_device_frame=tk.Frame(self.device_settings_frame, bd=2, relief=tk.RIDGE)
+        self.leed_device_frame = tk.Frame(self.device_settings_frame, bd=2, relief=tk.RIDGE)
         self.leed_device_frame.pack(side='left')
         self.leed_info_frame = tk.Frame(self.leed_device_frame, bd=2, relief=tk.RIDGE)
         self.leed_info_frame.pack()
@@ -215,7 +216,7 @@ class LCGApp:
         self.select_directory_button.pack()
         frame_series = tk.Frame(self.camera_settings_frame, bd=2, relief=tk.RIDGE)
         frame_series.pack()
-        label_series = tk.Label(frame_series, text='Settings Serie:')
+        label_series = tk.Label(frame_series, text='Settings Series:')
         label_series.pack()
         image_series_frame = tk.Frame(frame_series)
         image_series_frame.pack()
@@ -291,7 +292,7 @@ class LCGApp:
         # Read SCREEN state
         screen_state, screen_result = self.leed_device.read_screen()
         if screen_state:
-            self.screen_label.config(text=f"SCREEN state: ON: {screen_result/1000}kV", fg="green", font=("Arial", 12))
+            self.screen_label.config(text=f"SCREEN state: ON: {screen_result / 1000}kV", fg="green", font=("Arial", 12))
         else:
             self.screen_label.config(text=f"SCREEN state: OFF", fg="red", font=("Arial", 12))
 
@@ -337,8 +338,9 @@ class LCGApp:
             start = float(self.start_energy_entry.get())
             end = float(self.end_energy_entry.get())
             step = float(self.step_energy_entry.get())
-            lenght = (end - start) // step + 1
-            text = f'LEED Series will be recorded in:\n {lenght} steps @{step} eV\n from {start} eV to {end} eV.\n To start the Series Capture, press:\n \'Start Image Capture Loop\' '
+            length = (end - start) // step + 1
+            text = f'LEED Series will be recorded in:\n {length} steps @{step} eV\n from {start} eV to {end} eV.\n To' \
+                   f' start the Series Capture, press:\n \'Start Image Capture Loop\' '
 
         else:
             text = 'Please check, that all given energy values are valid floats!'
@@ -399,19 +401,20 @@ class LCGApp:
             start = float(self.start_energy_entry.get())
             end = float(self.end_energy_entry.get())
             step = float(self.step_energy_entry.get())
-            lenght = (end - start) // step + 1
-            text = f'LEED Series started with:\n {lenght} steps @{step} eV\n from {start} eV to {end} eV.\n'
+            length = (end - start) // step + 1
+            text = f'LEED Series started with:\n {length} steps @{step} eV\n from {start} eV to {end} eV.\n'
 
         else:
             start = 10
             end = 100
             step = 5
-            lenght = (end - start) // step + 1
-            text = f'Not all given energies are valid floats!\n Series started with standard values:\n {lenght} steps @{step} eV\n from {start} eV to {end} eV.\n'
+            length = (end - start) // step + 1
+            text = f'Not all given energies are valid floats!\n Series started with standard values:\n {length} steps' \
+                   f' @{step} eV\n from {start} eV to {end} eV.\n '
         self.label_series_confirm.config(text=text)
         self.capture_step = 0
-        self.approx_gain, self.approx_exposure=self.precalculate_gain_and_exposure(start, end, lenght)
-        print(self.approx_gain,self.approx_exposure)
+        self.approx_gain, self.approx_exposure = self.precalculate_gain_and_exposure(start, end, length)
+        print(self.approx_gain, self.approx_exposure)
         self.capture_energy_image(start, end, step)
 
     def lin_interpolate(self, x, x_list, y_list):
@@ -426,7 +429,7 @@ class LCGApp:
             y0, y1 = y_list[i - 1], y_list[i]
             return y0 + (y1 - y0) * ((x - x0) / (x1 - x0))
 
-    def precalculate_gain_and_exposure(self, start, end, lenght):
+    def precalculate_gain_and_exposure(self, start, end, length):
         energy_values = []
         gain_values = []
         exposure_values = []
@@ -438,14 +441,14 @@ class LCGApp:
                 exposure_values.append(float(row['Exposure']))
         min_energy = start
         max_energy = end
-        num_points = int(lenght)
+        num_points = int(length)
 
         approximation_gain_array = []
         approximation_exposure_array = []
         for i in range(num_points):
             energy = min_energy + ((max_energy - min_energy) / num_points) * i
             gain = int(self.lin_interpolate(energy, energy_values, gain_values))
-            exposure = np.round(self.lin_interpolate(energy, energy_values, exposure_values),1)
+            exposure = np.round(self.lin_interpolate(energy, energy_values, exposure_values), 1)
             approximation_gain_array.append(gain)
             approximation_exposure_array.append(exposure)
         return approximation_gain_array, approximation_exposure_array
@@ -460,7 +463,7 @@ class LCGApp:
             self.leed_device.send_energy(energy)
             self.result_label.config(text=f"Result: {self.leed_device.read_energy()}")
             self.output_leed.config(text=f"Result: {self.leed_device.read_energy()}")
-            self.camera.set(cv2.CAP_PROP_EXPOSURE,self.approx_exposure[self.capture_step]*10000)
+            self.camera.set(cv2.CAP_PROP_EXPOSURE, self.approx_exposure[self.capture_step] * 10000)
             self.camera.set(cv2.CAP_PROP_GAIN, self.approx_gain[self.capture_step])
             break_time = 1000 if self.camera.get(cv2.CAP_PROP_EXPOSURE) // 10 < 1000 else self.camera.get(
                 cv2.CAP_PROP_EXPOSURE) // 10
@@ -481,7 +484,7 @@ class LCGApp:
             print("Image capturing completed")
 
     def select_calibration_file(self):
-        new_file_path= filedialog.askopenfilename()
+        new_file_path = filedialog.askopenfilename()
         if os.path.isfile(new_file_path):
             self.calibration_file = new_file_path
             self.calibration_file_text.delete(1.0, tk.END)
@@ -544,7 +547,7 @@ class LCGApp:
 
     def load_camera_settings(self):
         try:
-            with open(script_directory + '/ccd_config.toml', 'r') as config_file:
+            with open(script_directory + '/config.toml', 'r') as config_file:
                 config = toml.load(config_file)
                 self.camera_index = config.get('CameraSettings', {}).get('camera_index')
                 self.selected_resolution.set(config.get('CameraSettings', {}).get('initial_resolution'))
@@ -572,7 +575,7 @@ class LCGApp:
     def load_resolutions(self):
         resolutions = {}
         try:
-            with open(script_directory + '/ccd_config.toml', 'r') as config_file:
+            with open(script_directory + '/config.toml', 'r') as config_file:
                 config = toml.load(config_file)
                 resolutions = config.get('CameraSettings', {}).get('resolutions')
         except FileNotFoundError as e:
@@ -583,7 +586,7 @@ class LCGApp:
 
     def save_camera_settings(self):
         # Read existing configuration
-        with open(script_directory + '/ccd_config.toml', 'r') as config_file:
+        with open(script_directory + '/config.toml', 'r') as config_file:
             config = toml.load(config_file)
 
         # Update specific settings
@@ -595,12 +598,12 @@ class LCGApp:
         config['CameraSettings']['exposure_time'] = self.exposure_time
         config['CameraSettings']['exposure_auto'] = self.boolean_auto_exposure.get()
         # Rewrite the updated settings back to the file
-        with open(script_directory + '/ccd_config.toml', 'w') as config_file:
+        with open(script_directory + '/config.toml', 'w') as config_file:
             toml.dump(config, config_file)
 
     def load_leed_settings(self):
         try:
-            with open(script_directory + '/ccd_config.toml', 'r') as config_file:
+            with open(script_directory + '/config.toml', 'r') as config_file:
                 config = toml.load(config_file)
                 host = config.get('LEEDSettings', {}).get('server_host')
                 port = config.get('LEEDSettings', {}).get('server_port')
@@ -611,14 +614,14 @@ class LCGApp:
         self.leed_server_port_text.set(port)
 
     def save_leed_settings(self):
-        with open(script_directory + '/ccd_config.toml', 'r') as config_file:
+        with open(script_directory + '/config.toml', 'r') as config_file:
             config = toml.load(config_file)
         if self.leed_device.validate_leed_ip(self.leed_server_host_text.get()):
             config['LEEDSettings']['server_host'] = self.leed_server_host_text.get()
             config['LEEDSettings']['server_port'] = self.leed_server_port_text.get()
         else:
             print('Current configuration does not contain a valid IP, therefore it was not saved.')
-        with open(script_directory + '/ccd_config.toml', 'w') as config_file:
+        with open(script_directory + '/config.toml', 'w') as config_file:
             toml.dump(config, config_file)
 
     def video_capture_thread(self):
@@ -688,7 +691,7 @@ class LCGApp:
         settings_window.withdraw()
 
     def on_settings_window_minimize(self, event):
-        #not working on ubuntu
+        # not working on ubuntu
         global settings_window
         settings_window.withdraw()
 
@@ -914,7 +917,8 @@ class LCGApp:
         print(f'Calibration saved to:{self.calibration_file}')
         self.output_calibration.delete("1.0", "end")
         self.output_calibration.insert('end',
-                                       f'Calibration saved to:{self.calibration_file}\n Temporary calibration still available! Current values:')
+                                       f'Calibration saved to:{self.calibration_file}\n Temporary calibration still '
+                                       f'available! Current values:')
         for entry in self.calibration_values:
             self.output_calibration.insert("end", f"{entry}\n")
 
@@ -1038,15 +1042,16 @@ def main():
     try:
         cameras = list_available_cameras()
         camera_index = int(input("Enter the camera index to use: "))
-        with open(script_directory + '/ccd_config.toml', 'r') as config_file:
+        with open(script_directory + '/config.toml', 'r') as config_file:
             config = toml.load(config_file)
         if config.get('CameraSettings', {}).get('camera_index') != camera_index:
-            print('The choosen camera differs from the settings in the config file.')
+            print('The chosen camera differs from the settings in the config file.')
             camera_idx = int(input(
-                'Please confirm by entering the camera index you wish to use again to overwrite the settings in the config file:'))
+                'Please confirm by entering the camera index you wish to use again to overwrite the settings in the '
+                'config file:'))
             config['CameraSettings']['camera_index'] = camera_idx
             camera_index = camera_idx
-        with open(script_directory + '/ccd_config.toml', 'w') as config_file:
+        with open(script_directory + '/config.toml', 'w') as config_file:
             toml.dump(config, config_file)
         if camera_index < len(cameras):
             root = tk.Tk()

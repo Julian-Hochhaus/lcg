@@ -1,0 +1,4 @@
+opencv-python>=4.8.1.78
+Pillow>=9.0.1
+numpy>=1.26.2
+toml>=0.10.2
