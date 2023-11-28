@@ -36,6 +36,13 @@ class LEEDDevice:
             return result
         except OSError:
             return f"Error setting energy."
+    def send_ramp(self, ramp):
+        try:
+            command = f'VRA{float(ramp)}\r'
+            result=self.send_command(command)
+            return result
+        except OSError:
+            return f"Error setting ramp."
     def read_screen(self):
         try:
             command = f'RSC'
@@ -43,7 +50,13 @@ class LEEDDevice:
             return state, value[2]
         except OSError as e:
             return f"Error reading Screen state: {str(e)}"
-
+    def read_ramp(self):
+        try:
+            command = f'RRA'
+            state, value=self.read_device_property(command)
+            return state, value
+        except OSError as e:
+            return f"Error reading Ramp: {str(e)}"
     def read_cathode(self):
         try:
             command = f'RCA'
@@ -91,7 +104,14 @@ class LEEDDevice:
             state, value = self.read_device_property(command)
             return state, value[-1]
         except OSError as e:
-            return f"Error reading Energy: {str(e)}"
+            return f"Error reading beam current: {str(e)}"
+    def read_collector(self):
+        try:
+            command = f'RCO'
+            state, value = self.read_device_property(command)
+            return state, value
+        except OSError as e:
+            return f"Error reading Collector: {str(e)}"
     def regex_prop_off(self, input_text):
         pattern = re.compile(
             r"[A-Za-z]+\s+[A-Za-z]+\s+off",
