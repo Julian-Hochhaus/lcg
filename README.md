@@ -43,7 +43,7 @@ pip install -r requirements.txt
 4. Inside the cloned folder, run `python gui.py` to start the application.
 ### Usage
 Launch the application by running gui.py.
-![Main GUI window](documentation/main_window.png)
+![Main GUI window]([documentation/main_window.png](https://github.com/Julian-Hochhaus/lcg/blob/main/documentation/main_window.png))
 
 The main window holds in the upper half on the left the livefeed of the choosen camera. On the right side of the upper half, the last saved image will be displayed.
 
@@ -52,7 +52,7 @@ Use the buttons to perform specific actions like setting energy levels, capturin
 TODO: explain I(V) handling as well as calibration curve.
 
 By pressing `Òpen Settings`, the settings window will appear, where you are able to manipulate camera settings as well as generate a gain calibration curve for I(V) image series. In addition, arbitrary commands to the ErLEED could be send here too. 
-![Settings window](documentation/settings_window.png)
+![Settings window]([documentation/](https://github.com/Julian-Hochhaus/lcg/blob/main/documentation/settings_window.png)
 
 ### Configuration
 
