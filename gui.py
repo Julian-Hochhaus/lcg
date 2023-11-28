@@ -16,7 +16,7 @@ import tkinter.filedialog as filedialog
 
 script_directory = os.path.dirname(os.path.abspath(__file__))
 settings_window = None
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 
 def list_available_cameras():
