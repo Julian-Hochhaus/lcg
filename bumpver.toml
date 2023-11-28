@@ -10,3 +10,4 @@ push = true
 [tool.bumpver.file_patterns]
 "bumpver.toml" = ['current_version = "{version}"']
 "gui.py" = ['__version__ = "{version}"']
+'pyproject.toml' =['version = "{version}"']

@@ -1,0 +1,17 @@
+# pyproject.toml
+
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel", 'opencv-python', 'Pillow','toml', 'numpy', 'lmfit']
+build-backend = "setuptools.build_meta"
+
+[project]
+name='lcg'
+readme='README.md'
+version = "0.3.0"
+authors=[{name='Julian Hochhaus', email='julian.hochhaus@tu-dortmund.de'}]
+license={file='LICENSE', name='MIT'}
+description='This project is a graphical user interface (GUI) designed to control a SPECS ErLEED digital controller and a CCD-camera from The Imaging Source.'
+
+[project.urls]
+homepage='https://github.com/Julian-Hochhaus/lcg'
+documentation='https://github.com/Julian-Hochhaus/lcg#readme'
