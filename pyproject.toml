@@ -5,7 +5,7 @@ requires = ["setuptools>=61.0.0", "wheel", 'opencv-python', 'Pillow','toml', 'nu
 build-backend = "setuptools.build_meta"
 
 [project]
-name='lcg'
+name='leedccdgui'
 readme='README.md'
 version = "0.4.0"
 authors=[{name='Julian Hochhaus', email='julian.hochhaus@tu-dortmund.de'}]
