@@ -153,7 +153,8 @@ class LCGApp:
         self.leed_info_frame_label.pack()
         self.screen_label = tk.Label(self.leed_info_frame, text="SCREEN state: N/A")
         self.screen_label.pack()
-
+        self.beam_current_label = tk.Label(self.leed_info_frame, text="BEAM CURRENT: N/A")
+        self.beam_current_label.pack()
         self.cathode_label = tk.Label(self.leed_info_frame, text="Cathode state: N/A")
         self.cathode_label.pack()
         self.device_label = tk.Label(self.leed_settings_frame, text="LEED Control:", width=25, font=label_font)
@@ -292,16 +293,22 @@ class LCGApp:
         # Read SCREEN state
         screen_state, screen_result = self.leed_device.read_screen()
         if screen_state:
-            self.screen_label.config(text=f"SCREEN state: ON: {screen_result / 1000}kV", fg="green", font=("Arial", 12))
+            self.screen_label.config(text=f"SCREEN state: ON: {float(screen_result) / 1000}kV", fg="green", font=("Arial", 12))
         else:
             self.screen_label.config(text=f"SCREEN state: OFF", fg="red", font=("Arial", 12))
 
             # Read Cathode state
         cathode_state, cathode_result = self.leed_device.read_cathode()
         if cathode_state:
-            self.cathode_label.config(text=f"Cathode state: ON: {cathode_result}A", fg="green", font=("Arial", 12))
+            self.cathode_label.config(text=f"Cathode state: ON: {float(cathode_result)}A", fg="green", font=("Arial", 12))
         else:
             self.cathode_label.config(text=f"Cathode state: OFF", fg="red", font=("Arial", 12))
+        beam_current_state, beam_current = self.leed_device.read_beam_current()
+        if beam_current_state:
+            self.beam_current_label.config(text=f"Beam current: {float(beam_current)}A", fg="green",
+                                      font=("Arial", 12))
+        else:
+            self.beam_curent_label.config(text=f"Beam Current: Not available", fg="red", font=("Arial", 12))
 
     def check_file_exists(self, event):
         if event.widget == self.calibration_file_text:
@@ -461,8 +468,8 @@ class LCGApp:
 
             self.update_leed_states()
             self.leed_device.send_energy(energy)
-            self.result_label.config(text=f"Result: {self.leed_device.read_energy()}")
-            self.output_leed.config(text=f"Result: {self.leed_device.read_energy()}")
+            self.result_label.config(text=f"Result: {self.leed_device.read_energy()[-1]}")
+            self.output_leed.config(text=f"Result: {self.leed_device.read_energy()[-1]}")
             self.camera.set(cv2.CAP_PROP_EXPOSURE, self.approx_exposure[self.capture_step] * 10000)
             self.camera.set(cv2.CAP_PROP_GAIN, self.approx_gain[self.capture_step])
             break_time = 1000 if self.camera.get(cv2.CAP_PROP_EXPOSURE) // 10 < 1000 else self.camera.get(
@@ -884,7 +891,7 @@ class LCGApp:
 
     def add_calibration_datapoint(self):
         self.update_leed_states()
-        energy = self.leed_device.read_energy()
+        energy = self.leed_device.read_energy()[-1]
         if energy is None:
             print("Failed to retrieve a valid energy value. Please try again.")
             return
