@@ -16,31 +16,29 @@ The CameraDevice as well as the LEEDDevice class could be used independently in 
 
 
 ## Installation
-### Prerequisites
+### Install via pip
+```
+pip install leedcameragui
+```
+### Manual Installation
+#### Steps to run the program
 The code was written and tested using Python 3.10.12, however it should run on other Python 3.xx.xx as well.
-
-Please make sure, that your installation contains all the following packages:
-
+1. Clone this repository.
+2. Please make sure, that your installation contains all the following packages:
 ```
 opencv-python>=4.8.1.78
 Pillow>=9.0.1
 numpy>=1.26.2
 toml>=0.10.2
 ```
-Program was tested using the given versions, probably will work with some older versions too.
+The program was tested using the given versions, probably will work with some older versions too.
 
 Install requirements e.g. using:
 ``` 
 pip install -r requirements.txt
 ```
+3. Inside the cloned folder, run `python gui.py` to start the application.
 
-
-### Steps to install LCG
-1. Clone this repository.
-2. Install Python (if not already installed).
-3. Install required Python libraries using 
-`pip install -r requirements.txt`.
-4. Inside the cloned folder, run `python gui.py` to start the application.
 ### Usage
 Launch the application by running gui.py.
 ![Main GUI window](https://github.com/Julian-Hochhaus/lcg/blob/main/documentation/main_window.png)
