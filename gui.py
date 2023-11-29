@@ -1,5 +1,6 @@
 import cv2
 from camera_device import CameraDevice
+from tkinter_new_dir import *
 from leed_device import LEEDDevice
 import tkinter as tk
 from PIL import Image, ImageTk
@@ -46,7 +47,7 @@ class LCGApp:
         self.approx_gain = []
         self.capture_step = 0
         self.root = root
-        self.root.title(f"Camera GUI v.{__version__}")
+        self.root.title(f"LCG: LEED Camera GUI v.{__version__}")
         self.root.geometry("1400x1020")
         self.root.maxsize(width=1920, height=1100)
 
@@ -269,7 +270,7 @@ class LCGApp:
                                                                var=self.boolean_use_calibration_file)
         self.boolean_use_calibration_checkbox.pack()
         self.select_calibration_file_button = tk.Button(frame_series, text="Select Calibration File",
-                                                        command=self.select_calibration_file)
+                                                        command=self.choose_calibration_file)
         self.select_calibration_file_button.pack()
         self.start_energy_entry.bind("<FocusOut>", self.validate_start_energy)
         self.end_energy_entry.bind("<FocusOut>", self.validate_end_energy)
@@ -290,25 +291,35 @@ class LCGApp:
         self.root.protocol("WM_DELETE_WINDOW", self.close_app)
 
     def update_leed_states(self):
-        # Read SCREEN state
-        screen_state, screen_result = self.leed_device.read_screen()
-        if screen_state:
-            self.screen_label.config(text=f"SCREEN state: ON: {float(screen_result) / 1000}kV", fg="green", font=("Arial", 12))
-        else:
-            self.screen_label.config(text=f"SCREEN state: OFF", fg="red", font=("Arial", 12))
+        def read_screen():
+            screen_state, screen_result = self.leed_device.read_screen()
+            if screen_state:
+                self.screen_label.config(text=f"SCREEN state: ON: {float(screen_result) / 1000}kV", fg="green",
+                                         font=("Arial", 12))
+            else:
+                self.screen_label.config(text=f"SCREEN state: OFF", fg="red", font=("Arial", 12))
 
-            # Read Cathode state
-        cathode_state, cathode_result = self.leed_device.read_cathode()
-        if cathode_state:
-            self.cathode_label.config(text=f"Cathode state: ON: {float(cathode_result)}A", fg="green", font=("Arial", 12))
-        else:
-            self.cathode_label.config(text=f"Cathode state: OFF", fg="red", font=("Arial", 12))
-        beam_current_state, beam_current = self.leed_device.read_beam_current()
-        if beam_current_state:
-            self.beam_current_label.config(text=f"Beam current: {float(beam_current)}A", fg="green",
-                                      font=("Arial", 12))
-        else:
-            self.beam_curent_label.config(text=f"Beam Current: Not available", fg="red", font=("Arial", 12))
+        def read_cathode():
+            cathode_state, cathode_result = self.leed_device.read_cathode()
+            if cathode_state:
+                self.cathode_label.config(text=f"Cathode state: ON: {float(cathode_result)}A", fg="green",
+                                          font=("Arial", 12))
+            else:
+                self.cathode_label.config(text=f"Cathode state: OFF", fg="red", font=("Arial", 12))
+
+        def read_beam_current():
+            beam_current_state, beam_current = self.leed_device.read_beam_current()
+            if beam_current_state:
+                self.beam_current_label.config(text=f"Beam current: {float(beam_current)}A", fg="green",
+                                               font=("Arial", 12))
+            else:
+                self.beam_current_label.config(text=f"Beam Current: Not available", fg="red", font=("Arial", 12))
+
+        # Schedule function calls with delays
+        self.root.after(500, read_screen)
+        self.root.after(1000, read_cathode)
+        self.root.after(1500, read_beam_current)
+        self.root.after(2000, lambda: None)
 
     def check_file_exists(self, event):
         if event.widget == self.calibration_file_text:
@@ -421,7 +432,6 @@ class LCGApp:
         self.label_series_confirm.config(text=text)
         self.capture_step = 0
         self.approx_gain, self.approx_exposure = self.precalculate_gain_and_exposure(start, end, length)
-        print(self.approx_gain, self.approx_exposure)
         self.capture_energy_image(start, end, step)
 
     def lin_interpolate(self, x, x_list, y_list):
@@ -443,9 +453,9 @@ class LCGApp:
         with open(self.calibration_file, newline='') as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
-                energy_values.append(float(row['Energy']))
+                energy_values.append(float(row['Energy (eV)']))
                 gain_values.append(float(row['Gain']))
-                exposure_values.append(float(row['Exposure']))
+                exposure_values.append(float(row['Exposure (s)']))
         min_energy = start
         max_energy = end
         num_points = int(length)
@@ -477,37 +487,58 @@ class LCGApp:
             self.root.after(int(5 * break_time))  # short break depending on camera exposure time (at least 5sec!)
             status, frame = self.camera.get_frame()
             if status:
-                file_path = self.save_directory + f'/images/EN_{energy}.jpg'
-                # Save the captured frame as an image
-                cv2.imwrite(file_path, frame)
+                file_path = self.save_directory + f'/EN_{energy}.png'
+                # Save the captured frame as a PNG image in 16-bit format
+                cv2.imwrite(file_path, frame, [cv2.IMWRITE_PNG_COMPRESSION, 16])
                 print(f"Photo captured and saved as '{file_path}'")
                 self.display_last_saved_image(frame)
             else:
                 print("Failed to capture photo")
             self.capture_step += 1
-            print(self.capture_step)
             self.root.after(int(3 * break_time), capture_next)
         else:
             print("Image capturing completed")
 
     def select_calibration_file(self):
-        new_file_path = filedialog.askopenfilename()
-        if os.path.isfile(new_file_path):
-            self.calibration_file = new_file_path
-            self.calibration_file_text.delete(1.0, tk.END)
-            self.calibration_file_text_config.delete(1.0, tk.END)
-            self.calibration_file_text.insert(tk.END, self.calibration_file)
-            self.calibration_file_text_config.insert(tk.END, self.calibration_file)
-            print("Calibration file successfully set to:", self.calibration_file)
-        else:
-            print("File does not exist. Reverting to last saved one.")
-            self.calibration_file_text.delete(1.0, tk.END)
-            self.calibration_file_text_config.delete(1.0, tk.END)
-            self.calibration_file_text.insert(tk.END, self.calibration_file)
-            self.calibration_file_text_config.insert(tk.END, self.calibration_file)
+        new_file_path = filedialog.asksaveasfilename()
 
+        if new_file_path:
+            if not os.path.isfile(new_file_path):
+                try:
+                    with open(new_file_path, 'w') as new_file:
+                        # Create an empty file if it doesn't exist
+                        pass
+                    print(f"New file created at: {new_file_path}")
+                except OSError as e:
+                    print(f"Failed to create file: {e}")
+            else:
+                print("File already exists.")
+
+            self.calibration_file = new_file_path
+            self.update_calibration_file_text()
+    def choose_calibration_file(self):
+        file_path = filedialog.askopenfilename()
+
+        if file_path:
+            if not os.path.isfile(file_path):
+                print(f"Calibration file: {file_path} does not exist.")
+            else:
+                self.calibration_file = file_path
+                self.update_calibration_file_text()
+    def update_calibration_file_text(self):
+        # Update text boxes with the calibration file path
+        self.calibration_file_text.delete(1.0, tk.END)
+        self.calibration_file_text_config.delete(1.0, tk.END)
+        self.calibration_file_text.insert(tk.END, self.calibration_file)
+        self.calibration_file_text_config.insert(tk.END, self.calibration_file)
+        print("Calibration file successfully set to:", self.calibration_file)
     def select_directory(self):
-        self.save_directory = filedialog.askdirectory()
+        #self.save_directory = filedialog.askdirectory()
+        dialog = CustomFolderDialog()
+        dialog.title("Select/Create New Folder")
+        dialog.wait_window()
+        if dialog.new_folder_path.get():  # If folder path is not empty
+            self.save_directory=dialog.new_folder_path.get()
         self.save_directory_text.delete(1.0, tk.END)  # Clear existing text
         self.save_directory_text.insert(tk.END, self.save_directory)
         print("Save directory:", self.save_directory)
@@ -539,12 +570,29 @@ class LCGApp:
     def capture_photo(self):
         status, frame = self.camera.get_frame()
         if status:
-            file_path = filedialog.asksaveasfilename(defaultextension=".jpg",
-                                                     filetypes=[("JPEG files", "*.jpg"), ("All files", "*.*")],
-                                                     title="Save Photo As")
+            file_path = filedialog.asksaveasfilename(
+                defaultextension=".jpg",
+                filetypes=[
+                    ("JPEG files", "*.jpg"),
+                    ("PNG files", "*.png"),
+                    ("TIFF files", "*.tiff"),
+                    ("All files", "*.*")
+                ],
+                title="Save Photo As"
+            )
             if file_path:
-                # Save the captured frame as an image with the user-specified filename and directory
-                cv2.imwrite(file_path, frame)
+                file_extension = file_path.split('.')[-1].lower()
+
+                if file_extension == 'png':
+                    # Save as PNG with 16-bit depth
+                    cv2.imwrite(file_path, frame, [cv2.IMWRITE_PNG_COMPRESSION, 16])
+                elif file_extension == 'tiff':
+                    # Save as TIFF with 16-bit depth
+                    cv2.imwrite(file_path, frame, [cv2.IMWRITE_TIFF_XDPI, 300, cv2.IMWRITE_TIFF_YDPI, 300])
+                else:
+                    # Default: Save as JPEG (8-bit depth)
+                    cv2.imwrite(file_path, frame)
+
                 print(f"Photo captured and saved as '{file_path}'")
                 self.display_last_saved_image(frame)
             else:
@@ -992,7 +1040,6 @@ class LCGApp:
             self.update_settings()  # Apply the new camera settings
 
     def update_settings(self):
-        print(self.selected_resolution.get())
         selected_width, selected_height = self.resolutions[self.selected_resolution.get()]
         try:
 

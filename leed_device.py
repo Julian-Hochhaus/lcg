@@ -73,16 +73,20 @@ class LEEDDevice:
                 command = f'{command_type}\r'
                 result = self.send_command(command)
                 #print(result)
-                if self.regex_prop_off(result):
-                    return False, result
-                else:
-                    numbers = self.regex_prop_actual_values(result)
-                    #print(numbers)
-                    if len(numbers) == 5:
-                        return True, numbers
+                if command in result:
+                    if self.regex_prop_off(result):
+                        return False, result
                     else:
-                        raise ValueError(
-                            f"The LEED did not return the expected result reading the {command_type} voltage. Pattern matching failed.")
+                        numbers = self.regex_prop_actual_values(result)
+                        #print(numbers)
+                        if len(numbers) == 5:
+                            return True, numbers
+                        else:
+                            raise ValueError(
+                                f"The LEED did not return the expected result reading the {command_type} voltage. Pattern matching failed.")
+                else:
+                    raise ValueError(
+                        f"The LEED did not return the expected result reading the {command_type} voltage. Pattern matching failed.")
             except OSError as e:
                 attempts += 1
                 print(f"Error reading {command_type} state: {str(e)}. Retrying... (Attempt {attempts}/{max_attempts})")
@@ -123,7 +127,7 @@ class LEEDDevice:
         match = pattern.search(input_text)
         if match:
             matched_sequence = match.group(0)
-            print(matched_sequence)
+            #print(matched_sequence)
             numbers = re.findall(r'[\+\-](?:[^\d]*([\d]*[\.\d]*[eE+-]*[\d]+|[\d]*))', matched_sequence)
             return numbers
         else:
