@@ -136,6 +136,15 @@ class LCGApp:
         self.info_frame = tk.Frame(self.device_settings_frame, bd=2, relief=tk.RIDGE)
         self.info_frame.pack(side="left")
 
+        self.series_frame = tk.Frame(self.info_frame)
+        self.series_frame.pack()
+        self.series_label0 = tk.Label(self.series_frame, text="Status Series Capture:", font=("Courier", 12), width=50,
+                                      height=1,
+                                      anchor="nw")
+        self.series_label0.pack()
+        self.series_label = tk.Label(self.series_frame, text="Not running!", font=("Courier", 12), width=50, height=3,
+                                     anchor="nw")
+        self.series_label.pack()
         button_width = 25
 
         self.info_label = tk.Label(self.info_frame, text="Stream Info:", font=label_font, width=25)
@@ -289,6 +298,7 @@ class LCGApp:
         self.update_leed_states()
 
         self.root.protocol("WM_DELETE_WINDOW", self.close_app)
+
 
     def update_leed_states(self):
         def read_screen():
@@ -516,6 +526,7 @@ class LCGApp:
 
             self.calibration_file = new_file_path
             self.update_calibration_file_text()
+
     def choose_calibration_file(self):
         file_path = filedialog.askopenfilename()
 
@@ -525,6 +536,7 @@ class LCGApp:
             else:
                 self.calibration_file = file_path
                 self.update_calibration_file_text()
+
     def update_calibration_file_text(self):
         # Update text boxes with the calibration file path
         self.calibration_file_text.delete(1.0, tk.END)
@@ -532,13 +544,14 @@ class LCGApp:
         self.calibration_file_text.insert(tk.END, self.calibration_file)
         self.calibration_file_text_config.insert(tk.END, self.calibration_file)
         print("Calibration file successfully set to:", self.calibration_file)
+
     def select_directory(self):
-        #self.save_directory = filedialog.askdirectory()
+        # self.save_directory = filedialog.askdirectory()
         dialog = CustomFolderDialog()
         dialog.title("Select/Create New Folder")
         dialog.wait_window()
         if dialog.new_folder_path.get():  # If folder path is not empty
-            self.save_directory=dialog.new_folder_path.get()
+            self.save_directory = dialog.new_folder_path.get()
         self.save_directory_text.delete(1.0, tk.END)  # Clear existing text
         self.save_directory_text.insert(tk.END, self.save_directory)
         print("Save directory:", self.save_directory)
@@ -979,7 +992,8 @@ class LCGApp:
 
     def send_cmd_leed(self):
         cmd = f'{str(self.entry_test_command.get())}\r'
-        result = self.leed_device.send_command(command=cmd)
+        result = self.leed_device.send_and_read_msg(command=cmd.encode())
+        result = result.decode('utf-8')
         self.output_leed.config(text=result)
         self.result_label.config(text=result)
         self.update_leed_states()
@@ -1047,7 +1061,7 @@ class LCGApp:
                 self.camera.release()
             self.camera.set_auto_gain(self.auto_gain_value)
             self.camera.update_camera_index(self.camera_index)
-            status, frame = self.camera.get_frame()
+            status, _ = self.camera.get_frame()
             if status:
                 frame_width = int(self.camera.get(cv2.CAP_PROP_FRAME_WIDTH))
                 frame_height = int(self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT))

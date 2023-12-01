@@ -1,4 +1,6 @@
 import re
+import select
+import time
 from socket import *
 class LEEDDevice:
     def __init__(self, leed_host='129.217.168.64', leed_port=4004):
@@ -7,6 +9,7 @@ class LEEDDevice:
         self.leed_host = leed_host
         self.leed_port = leed_port
         self.device_socket = socket(AF_INET, SOCK_STREAM)
+        #self.device_socket.setblocking(0)
         self.connection_established=self.connect_to_device()
         self.valid_ip=self.validate_leed_ip(ip_address=self.leed_host)
 
@@ -30,12 +33,24 @@ class LEEDDevice:
             raise ConnectionError("Could not connect to the LEED device")
             return False
     def send_energy(self, energy):
-        try:
-            command = f'VEN{float(energy)}\r'
-            result=self.send_command(command)
-            return result
-        except OSError:
-            return f"Error setting energy."
+        max_attempts = 20
+        attempts = 0
+        while attempts < max_attempts:
+            try:
+                command = f'VEN{float(energy)}\r'
+                state= self.send_command(command)
+                if state:
+                    return state
+                else:
+                    raise ValueError(
+                        f"Setting the energy was not sucessful!")
+
+            except OSError:
+                attempts += 1
+                return f"Error setting energy."
+            except ValueError as ve:
+                attempts += 1
+                print(f"ValueError: {ve}. Retrying... (Attempt {attempts}/{max_attempts})")
     def send_ramp(self, ramp):
         try:
             command = f'VRA{float(ramp)}\r'
@@ -71,22 +86,20 @@ class LEEDDevice:
         while attempts < max_attempts:
             try:
                 command = f'{command_type}\r'
-                result = self.send_command(command)
-                #print(result)
-                if command in result:
-                    if self.regex_prop_off(result):
-                        return False, result
-                    else:
-                        numbers = self.regex_prop_actual_values(result)
-                        #print(numbers)
-                        if len(numbers) == 5:
-                            return True, numbers
+                result=self.send_and_read_msg(command=command.encode())
+                if result is not None:
+                    result = result.decode('utf-8')
+                    if command in result:
+                        if self.regex_prop_off(result):
+                            return False, result
                         else:
-                            raise ValueError(
-                                f"The LEED did not return the expected result reading the {command_type} voltage. Pattern matching failed.")
-                else:
-                    raise ValueError(
-                        f"The LEED did not return the expected result reading the {command_type} voltage. Pattern matching failed.")
+                            numbers = self.regex_prop_actual_values(result)
+                            if len(numbers) == 5:
+                                return True, numbers
+                            else:
+                                raise ValueError(f"The LEED did not return the expected result reading the {command_type} voltage. Pattern matching failed.")
+                    else:
+                        raise ValueError(f"The LEED did not return the expected result reading the {command_type} voltage. Pattern matching failed.")
             except OSError as e:
                 attempts += 1
                 print(f"Error reading {command_type} state: {str(e)}. Retrying... (Attempt {attempts}/{max_attempts})")
@@ -94,12 +107,11 @@ class LEEDDevice:
                 attempts += 1
                 print(f"ValueError: {ve}. Retrying... (Attempt {attempts}/{max_attempts})")
 
-
     def read_energy(self):
         try:
             command = f'REN'
             state, value = self.read_device_property(command)
-            return state, value[2]
+            return state, value[3]
         except OSError as e:
             return f"Error reading Energy: {str(e)}"
     def read_beam_current(self):
@@ -134,14 +146,27 @@ class LEEDDevice:
             raise ValueError("No matching sequence found in the input text.")
 
 
+    def get_value_command(self, command):
+        max_attempts = 5
+        attempts = 0
+        while attempts < max_attempts:
+            try:
+                state=self.send_msg(command.encode())
+                if state:
+                    return state
+                else:
+                    raise ValueError( f"Sending command was not successful.")
+            except OSError:
+                return f"Error sending command."
+            except ValueError as ve:
+                attempts += 1
+                print(f"ValueError: {ve}. Retrying... (Attempt {attempts}/{max_attempts})")
     def send_command(self, command):
         try:
-            self.device_socket.send(command.encode())
-            data_set = self.device_socket.recv(512)
-            return data_set.decode('utf-8')
+            state=self.send_msg(command.encode())
+            return state
         except OSError:
-            return f"Error sending command."
-
+                return f"Error sending command."
     def change_ip_address(self, new_ip):
         if self.is_valid_ip(new_ip):
             if not self.connection_established:  # Check if connection is not yet established
@@ -162,5 +187,64 @@ class LEEDDevice:
         else:
             self.valid_ip = False
             raise ValueError("Invalid IP address. IP change was not possible.")
+
+    def send_msg(self, msg):
+        bytes=len(msg)
+        send_bytes,state=self.send_all(msg)
+        if bytes== send_bytes and state==None:
+            return True
+        else:
+            return False
+
+    def send_and_read_msg(self, command):
+        bytes_len = len(command)
+        send_bytes, state = self.send_all(command)
+
+        if bytes_len == send_bytes and state is None:
+            while True:
+                # Check if the socket is ready to be read
+                ready_to_read, _, _ = select.select([self.device_socket], [], [], 0.5)  # 0.5-second timeout
+                if self.device_socket in ready_to_read:
+                    msg = self.recv_msg()
+                    if msg:
+                        # Wait for the expected end sign
+                        if b'\r\n>' in msg:
+                            if command in msg:
+                                return msg
+
+                # If timeout occurred or unexpected data, continue waiting or raise an exception
+                else:
+                    print("Timeout occurred while waiting for data")
+                    return None
+
+        else:
+            return None
+
+
+    def send_all(self, data):
+        ret = self.device_socket.send(data)
+        if ret > 0:
+            return ret, self.send_all(data[ret:])
+        else:
+            return None
+
+    def recv_msg(self):
+        msg = self.recvall()
+        return msg
+
+    def recvall(self, end_sign=b'\r\n>'):
+        data = bytearray()
+        while not end_sign in data:
+            ready_to_read, _, _ = select.select([self.device_socket], [], [], 0.5)  # 0.5-second timeout
+            if self.device_socket in ready_to_read:
+                packet = self.device_socket.recv(1)
+                if not packet:
+                    return None
+                data += packet
+            else:
+                print("Timeout occurred while waiting for data")
+                return None
+        return data
+
     def close_connection(self):
         self.device_socket.close()
