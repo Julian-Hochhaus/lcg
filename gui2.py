@@ -20,7 +20,29 @@ import tkinter.filedialog as filedialog
 
 script_directory = os.path.dirname(os.path.abspath(__file__))
 settings_window = None
-__version__ = "0.5.0"
+__version__ = "0.4.2"
+
+
+def list_available_cameras():
+    cameras = []
+    index = 0
+    while True and index < 10:
+        cap = cv2.VideoCapture(index, cv2.CAP_V4L)
+        if not cap.isOpened():
+            cameras.append(f"Camera {index} is not available")
+        else:
+            cameras.append(f"Camera {index}")
+            cap.release()
+        index += 1
+
+    if not cameras:
+        print("No Cameras Available")
+    else:
+        print("Available Cameras:")
+        for camera in cameras:
+            print(camera)
+    return cameras
+
 
 class LCGApp:
     def __init__(self, root, camera_index, camera_list, tis):

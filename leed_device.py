@@ -39,6 +39,7 @@ class LEEDDevice:
             try:
                 command = f'VEN{float(energy)}\r'
                 state= self.send_command(command)
+                print('send_energy', state)
                 if state:
                     return state
                 else:
@@ -111,6 +112,7 @@ class LEEDDevice:
         try:
             command = f'REN'
             state, value = self.read_device_property(command)
+            print('read_energy', state, value)
             return state, value[3]
         except OSError as e:
             return f"Error reading Energy: {str(e)}"
