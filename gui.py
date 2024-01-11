@@ -17,6 +17,8 @@ import csv
 from bisect import bisect_left
 import subprocess
 import tkinter.filedialog as filedialog
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 script_directory = os.path.dirname(os.path.abspath(__file__))
 settings_window = None
@@ -55,16 +57,26 @@ class LCGApp:
         self.videoframes.pack(side='top')
         self.videoframes.update()
         # Place the live stream and last saved image on the Canvas
-        self.video_label = tk.Label(self.videoframes, text="Livefeed")
+        self.video_frame = tk.LabelFrame(self.videoframes, text="Livefeed")
+        # Create a Matplotlib figure and axis for displaying the camera feed
+        self.figure_live, self.ax_live = plt.subplots()
+        self.live_plot = self.ax_live.imshow(np.zeros((480, 640)), cmap='gray')  # Initialize with a blank image
+        plt.axis('off')  # Hide axes
+        plt.tight_layout()
+
+        # Use the TkAgg backend for Matplotlib
+        self.canvas_live = FigureCanvasTkAgg(self.figure_live, master=self.video_frame)
+        self.canvas_live.draw()
+        self.canvas_live.get_tk_widget().pack()
 
         self.livefeed_window = self.videoframes.create_window(self.videoframes.winfo_width() // 4,
                                                               self.videoframes.winfo_height() / 2,
-                                                              window=self.video_label, anchor=tk.CENTER)
+                                                              window=self.video_frame, anchor=tk.CENTER)
         x1, y1, _, _ = self.videoframes.bbox(self.livefeed_window)
-        self.videoframes.create_rectangle(x1 + self.video_label.winfo_reqwidth() // 2 - 320,
-                                          y1 + self.video_label.winfo_reqheight() // 2 - 240,
-                                          x1 + self.video_label.winfo_reqwidth() // 2 + 320,
-                                          y1 + self.video_label.winfo_reqheight() // 2 + 240, fill="grey95",
+        self.videoframes.create_rectangle(x1 + self.video_frame.winfo_reqwidth() // 2 - 320,
+                                          y1 + self.video_frame.winfo_reqheight() // 2 - 240,
+                                          x1 + self.video_frame.winfo_reqwidth() // 2 + 320,
+                                          y1 + self.video_frame.winfo_reqheight() // 2 + 240, fill="grey95",
                                           outline="black")
         self.last_saved_image_label = tk.Label(self.videoframes, text="Last Saved Image")
         self.last_saved_image_label_window = self.videoframes.create_window(self.videoframes.winfo_width() * 3 // 4,
@@ -682,9 +694,8 @@ class LCGApp:
 
     def video_capture_thread(self):
         while not self.stop_event.is_set():
-            frame = self.camera.get_image_from_buffer(-1)
-            print(frame)
-            status = frame is not None
+            if self.camera.isRunning():
+                frame = self.camera.get_image()  # Get the image from the camera
             #if status:
              #   frame_width = int(self.camera.get(cv2.CAP_PROP_FRAME_WIDTH))
               #  frame_height = int(self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -696,11 +707,6 @@ class LCGApp:
                 #self.stream_status_label.config(text="Stream Status: Running", fg="green")
             #else:
              #   break
-            print(status)
-            if status:
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                img = Image.fromarray(frame)
-
                 # Get the actual camera stream resolution
                 actual_width = self.camera.width
                 actual_height = self.camera.height
@@ -708,13 +714,10 @@ class LCGApp:
                 ratio = float(actual_width / actual_height)
                 new_width = int(480 * ratio)
                 new_height = int(480)
-
-                # Resize the frame while maintaining the aspect ratio
-                resized_frame = img.resize((new_width, new_height), Image.ANTIALIAS)
-                img = ImageTk.PhotoImage(resized_frame)
+                resized_frame = cv2.resize(frame, (new_width, new_height), interpolation=cv2.INTER_AREA)
 
                 try:
-                    self.q.put(img, block=False)
+                    self.q.put(frame, block=False)
                 except queue.Full:
                     pass
             else:
@@ -723,10 +726,11 @@ class LCGApp:
 
     def update_video(self):
         try:
-            img = self.q.get_nowait()
-            if img is not None:
-                self.video_label.imgtk = img
-                self.video_label.configure(image=img)
+            if not self.q.empty():
+                img = self.q.get_nowait()
+                if img is not None:
+                    self.figure_live.canvas.draw_idle()
+                    plt.imshow(img)
                 self.video_label.image = img  # Keep a reference
         except queue.Empty:
             pass
@@ -1095,7 +1099,7 @@ def main():
         if camera_index < len(cameras):
             root = tk.Tk()
             app = LCGApp(root, camera_index, cameras, tis)
-            app.update_video()  # Start the video update loop
+            app.update_video(tis)  # Start the video update loop
             root.mainloop()
 
         else:
