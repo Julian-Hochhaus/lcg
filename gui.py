@@ -501,7 +501,7 @@ class LCGApp:
             self.root.after(int(5 * break_time))  # short break depending on camera exposure time (at least 5sec!)
             status, frame = self.camera.get_frame()
             if status:
-                file_path = self.save_directory + f'/EN_{energy}exposure{self.camera.get(cv2.CAP_PROP_EXPOSURE)}_gain{self.camera.get(cv2.CAP_PROP_GAIN)}.png'
+                file_path = self.save_directory + f'/EN_{energy}.png'
                 # Save the captured frame as a PNG image in 16-bit format
                 cv2.imwrite(file_path, frame, [cv2.IMWRITE_PNG_COMPRESSION, 16])
                 print(f"Photo captured and saved as '{file_path}'")
