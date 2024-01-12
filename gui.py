@@ -446,7 +446,6 @@ class LCGApp:
 
     def lin_interpolate(self, x, x_list, y_list):
         i = bisect_left(x_list, x)
-
         if i == 0:
             return y_list[0]
         elif i == len(x_list):
@@ -460,12 +459,17 @@ class LCGApp:
         energy_values = []
         gain_values = []
         exposure_values = []
+        print(self.calibration_file)
         with open(self.calibration_file, newline='') as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
                 energy_values.append(float(row['Energy (eV)']))
                 gain_values.append(float(row['Gain']))
                 exposure_values.append(float(row['Exposure (s)']))
+        sorted_indexes=np.asarray(energy_values).argsort()
+        energy_values=np.asarray(energy_values)[sorted_indexes]
+        gain_values=np.asarray(gain_values)[sorted_indexes]
+        exposure_values=np.asarray(exposure_values)[sorted_indexes]
         min_energy = start
         max_energy = end
         num_points = int(length)
@@ -486,10 +490,10 @@ class LCGApp:
             def capture_next():
                 self.capture_energy_image(energy + step, end_energy, step)
 
-            self.update_leed_states()
+            #self.update_leed_states()
             self.leed_device.send_energy(energy)
-            self.result_label.config(text=f"Result: {self.leed_device.read_energy()[-1]}")
-            self.output_leed.config(text=f"Result: {self.leed_device.read_energy()[-1]}")
+            #self.result_label.config(text=f"Result: {self.leed_device.read_energy()[-1]}")
+            #self.output_leed.config(text=f"Result: {self.leed_device.read_energy()[-1]}")
             self.camera.set(cv2.CAP_PROP_EXPOSURE, self.approx_exposure[self.capture_step] * 10000)
             self.camera.set(cv2.CAP_PROP_GAIN, self.approx_gain[self.capture_step])
             break_time = 1000 if self.camera.get(cv2.CAP_PROP_EXPOSURE) // 10 < 1000 else self.camera.get(
@@ -497,11 +501,11 @@ class LCGApp:
             self.root.after(int(5 * break_time))  # short break depending on camera exposure time (at least 5sec!)
             status, frame = self.camera.get_frame()
             if status:
-                file_path = self.save_directory + f'/EN_{energy}.png'
+                file_path = self.save_directory + f'/EN_{energy}exposure{self.camera.get(cv2.CAP_PROP_EXPOSURE)}_gain{self.camera.get(cv2.CAP_PROP_GAIN)}.png'
                 # Save the captured frame as a PNG image in 16-bit format
                 cv2.imwrite(file_path, frame, [cv2.IMWRITE_PNG_COMPRESSION, 16])
                 print(f"Photo captured and saved as '{file_path}'")
-                self.display_last_saved_image(frame)
+                #self.display_last_saved_image(frame)
             else:
                 print("Failed to capture photo")
             self.capture_step += 1

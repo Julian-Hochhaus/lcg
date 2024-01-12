@@ -35,6 +35,8 @@ class CustomFolderDialog(tk.Toplevel):
         directory = filedialog.askdirectory()
         if directory:
             self.folder_path.set(directory)
+        self.lift()
+        self.deiconify()
 
     def create_new_folder(self):
         directory = self.folder_path.get()
