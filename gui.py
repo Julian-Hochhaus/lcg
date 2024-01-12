@@ -699,6 +699,7 @@ class LCGApp:
     def video_capture_thread(self):
         while not self.stop_event.is_set():
             status, frame = self.camera.get_frame()
+            print(type(frame))
             if status:
                 frame_width = int(self.camera.get(cv2.CAP_PROP_FRAME_WIDTH))
                 frame_height = int(self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -1112,7 +1113,8 @@ class LCGApp:
 
 def main():
     try:
-        cameras = list_available_cameras()
+        #cameras = list_available_cameras()
+
         camera_index = int(input("Enter the camera index to use: "))
         with open(script_directory + '/config.toml', 'r') as config_file:
             config = toml.load(config_file)
