@@ -65,6 +65,7 @@ class LCGApp(QMainWindow):
         res = fmt.get('GRAY16_LE').res_list[0]
         fps = fmt.get('GRAY16_LE').get_fps_list('640x480')[0]
         tis.open_device(ser[idx], res, fps, TIS.SinkFormats.GRAY16_LE, False)
+        print('Help')
         tis.start_pipeline()
         tis.set_property('Gain', 0)
         tis.set_property('ExposureTime', 10000)

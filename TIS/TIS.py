@@ -52,6 +52,7 @@ def choose_camera(available_cameras):
             tis = TISCameraDevice()
             resolution=ResDesc(640,480,['1/1', '5/1', '15/1', '30/1', '60/1'])
             fps='1/1'
+            print('True')
             tis.open_device(available_cameras[camera_index], resolution, fps, SinkFormats.GRAY16_LE, False)
             return tis, camera_index
         else:
@@ -229,6 +230,7 @@ class TISCameraDevice:
         self.source.set_property("serial", self.serialnumber)
         self.pipeline.set_state(Gst.State.READY)
         self.pipeline.get_state(40000000)
+        print('Test')
 
     def _create_pipeline(self, conversion: str, showvideo: bool):
         if conversion and not conversion.strip().endswith("!"):
@@ -298,7 +300,7 @@ class TISCameraDevice:
         self.pipeline.set_state(Gst.State.PLAYING)
         error = self.pipeline.get_state(5000000000)
         if error[1] != Gst.State.PLAYING:
-            print("Error starting pipeline. {0}".format(""))
+            print("Error starting pipeline. {0}".format(error))
             return False
         return True
 
