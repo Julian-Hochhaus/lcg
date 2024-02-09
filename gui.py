@@ -589,6 +589,7 @@ class LCGApp:
         if status:
             file_path = filedialog.asksaveasfilename(
                 defaultextension=".jpg",
+                initialdir="/home/lab/Desktop/LEED/"
                 filetypes=[
                     ("JPEG files", "*.jpg"),
                     ("PNG files", "*.png"),
