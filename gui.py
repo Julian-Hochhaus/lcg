@@ -563,9 +563,14 @@ class LCGApp():
         print("Save directory:", self.save_directory)
 
     def set_save_directory(self):
-        with open('save_directory.json', 'r') as f:
-            data = json.load(f)
-        return data['save_directory']
+        with open('config.toml', 'r') as f:
+            config = toml.load(f)
+        if 'save_directory' in config and 'path' in config['save_directory']:
+            return config['save_directory']['path']
+        else:
+             # Set default save_directory to the directory of lcg
+             save_directory = os.path.dirname(os.path.abspath(__file__)) # get script_directory
+        return save_directory
 
 
     def set_energy(self):

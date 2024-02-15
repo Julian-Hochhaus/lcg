@@ -11,6 +11,9 @@ exposure_time = 1
 server_host = "129.217.168.64"
 server_port = 4004
 
+[save_directory]
+path = "/home/lab/Desktop/LEED/"
+
 [CameraSettings.resolutions]
 640x480 = [ 640, 480,]
 1920x1080 = [ 1920, 1080,]
