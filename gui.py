@@ -14,7 +14,7 @@ import csv
 from bisect import bisect_left
 import subprocess
 import tkinter.filedialog as filedialog
-import json
+from datetime import datetime
 
 script_directory = os.path.dirname(os.path.abspath(__file__))
 settings_window = None
@@ -565,11 +565,21 @@ class LCGApp():
     def set_save_directory(self):
         with open('config.toml', 'r') as f:
             config = toml.load(f)
+
         if 'save_directory' in config and 'path' in config['save_directory']:
-            return config['save_directory']['path']
+            base_directory = config['save_directory']['path']
         else:
-             # Set default save_directory to the directory of lcg
-             save_directory = os.path.dirname(os.path.abspath(__file__)) # get script_directory
+            # Set default base_directory to the directory of the script
+            base_directory = os.path.dirname(os.path.abspath(__file__))
+
+            # Create a subdirectory with the current date
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        save_directory = os.path.join(base_directory, current_date)
+
+        # Check if the subdirectory exists, otherwise create it
+        if not os.path.exists(save_directory):
+            os.makedirs(save_directory)
+
         return save_directory
 
 
