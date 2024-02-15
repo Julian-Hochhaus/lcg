@@ -4,9 +4,10 @@ import os
 
 
 class CustomFolderDialog(tk.Toplevel):
-    def __init__(self, master=None, **options):
+    def __init__(self,save_directory, master=None, **options):
         super().__init__(master, **options)
         self.geometry("400x200")
+        self.save_directory = save_directory
 
         self.folder_path = tk.StringVar()
         self.folder_name = tk.StringVar()
@@ -32,7 +33,8 @@ class CustomFolderDialog(tk.Toplevel):
 
 
     def browse_directory(self):
-        directory = filedialog.askdirectory()
+        directory = filedialog.askdirectory(initialdir=self.save_directory)
+
         if directory:
             self.folder_path.set(directory)
         self.lift()

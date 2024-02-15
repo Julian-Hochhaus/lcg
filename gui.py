@@ -14,6 +14,7 @@ import csv
 from bisect import bisect_left
 import subprocess
 import tkinter.filedialog as filedialog
+import json
 
 script_directory = os.path.dirname(os.path.abspath(__file__))
 settings_window = None
@@ -41,7 +42,7 @@ def list_available_cameras():
     return cameras
 
 
-class LCGApp:
+class LCGApp():
     def __init__(self, root, camera_index, camera_list):
         self.approx_exposure = []
         self.approx_gain = []
@@ -50,6 +51,7 @@ class LCGApp:
         self.root.title(f"LCG: LEED Camera GUI v.{__version__}")
         self.root.geometry("1400x1020")
         self.root.maxsize(width=1920, height=1100)
+
 
         # self.last_saved_image_label.pack(side="right")
         # initialisation of all values
@@ -216,7 +218,7 @@ class LCGApp:
         frame_save_directory.pack()
         self.current_save_directory = tk.Label(frame_save_directory, text="Save Directory:")
         self.current_save_directory.pack(side=tk.LEFT)
-        self.save_directory = script_directory
+        self.save_directory =self.set_save_directory()
         self.save_directory_text = tk.Text(frame_save_directory, wrap=tk.WORD, height=1, width=25)
         self.save_directory_text.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.save_directory_text.insert(tk.END, self.save_directory)
@@ -551,7 +553,7 @@ class LCGApp:
 
     def select_directory(self):
         # self.save_directory = filedialog.askdirectory()
-        dialog = CustomFolderDialog()
+        dialog = CustomFolderDialog(save_directory=self.save_directory)
         dialog.title("Select/Create New Folder")
         dialog.wait_window()
         if dialog.new_folder_path.get():  # If folder path is not empty
@@ -559,6 +561,12 @@ class LCGApp:
         self.save_directory_text.delete(1.0, tk.END)  # Clear existing text
         self.save_directory_text.insert(tk.END, self.save_directory)
         print("Save directory:", self.save_directory)
+
+    def set_save_directory(self):
+        with open('save_directory.json', 'r') as f:
+            data = json.load(f)
+        return data['save_directory']
+
 
     def set_energy(self):
         energy = self.command_entry.get()
@@ -589,7 +597,7 @@ class LCGApp:
         if status:
             file_path = filedialog.asksaveasfilename(
                 defaultextension=".jpg",
-                initialdir="/home/lab/Desktop/LEED/",
+                initialdir=self.save_directory,
                 filetypes=[
                     ("JPEG files", "*.jpg"),
                     ("PNG files", "*.png"),
