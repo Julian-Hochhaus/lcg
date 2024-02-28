@@ -597,6 +597,8 @@ class LCGApp():
 
     def set_energy_leed(self):
         energy = self.command_energy_entry.get()
+
+
         try:
             energy_float = float(energy)
             self.update_leed_states()
@@ -609,10 +611,19 @@ class LCGApp():
 
     def capture_photo(self):
         status, frame = self.camera.get_frame()
+        current_date = datetime.now().strftime("%Y%m%d")
+        energy = self.command_entry.get()
+
+        with open('config.toml', 'r') as f:
+            self.config = toml.load(f)
+            self.prefix = self.config['save_directory']['prefix']
+
+
         if status:
             file_path = filedialog.asksaveasfilename(
                 defaultextension=".jpg",
                 initialdir=self.save_directory,
+                initialfile=current_date +'_'+ str(self.prefix) +'_' + energy+ 'eV',
                 filetypes=[
                     ("JPEG files", "*.jpg"),
                     ("PNG files", "*.png"),
@@ -623,6 +634,10 @@ class LCGApp():
             )
             if file_path:
                 file_extension = file_path.split('.')[-1].lower()
+                self.config['save_directory']['prefix'] = self.prefix + 1
+
+                with open('config.toml', 'w') as f:
+                    toml.dump(self.config, f)
 
                 if file_extension == 'png':
                     # Save as PNG with 16-bit depth
@@ -911,6 +926,8 @@ class LCGApp():
         self.command_energy_entry = tk.Entry(leed_energy_frame)
         self.command_energy_entry.pack(side=tk.LEFT)
 
+
+
         set_energy_button = tk.Button(leed_energy_frame, text="Set energy", command=self.set_energy_leed)
         set_energy_button.pack(side=tk.LEFT)
         leed_command_frame = tk.Frame(leed_test_frame)
@@ -920,6 +937,7 @@ class LCGApp():
 
         self.entry_test_command = tk.Entry(leed_command_frame)
         self.entry_test_command.pack(side=tk.LEFT)
+
 
         test_command_button = tk.Button(leed_command_frame, text="Send command", command=self.send_cmd_leed)
         test_command_button.pack(side=tk.LEFT)
