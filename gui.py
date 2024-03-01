@@ -488,6 +488,10 @@ class LCGApp():
 
     def capture_energy_image(self, energy, end_energy, step):
         if energy <= end_energy:
+            current_date = datetime.now().strftime("%Y%m%d")
+            with open('config.toml', 'r') as f:
+                self.config = toml.load(f)
+                self.prefix = self.config['save_directory']['prefix']
 
             def capture_next():
                 self.capture_energy_image(energy + step, end_energy, step)
@@ -503,10 +507,15 @@ class LCGApp():
             self.root.after(int(5 * break_time))  # short break depending on camera exposure time (at least 5sec!)
             status, frame = self.camera.get_frame()
             if status:
-                file_path = self.save_directory + f'/EN_{energy}.png'
+                file_path = self.save_directory+'/'+ current_date +'_'+ str(self.prefix) +'_' + str(energy)+ '_eV.png' #f'/EN_{energy}.png'
                 # Save the captured frame as a PNG image in 16-bit format
                 cv2.imwrite(file_path, frame, [cv2.IMWRITE_PNG_COMPRESSION, 16])
                 print(f"Photo captured and saved as '{file_path}'")
+
+                self.config['save_directory']['prefix'] = self.prefix + 1
+                with open('config.toml', 'w') as f:
+                    toml.dump(self.config, f)
+
                 #self.display_last_saved_image(frame)
             else:
                 print("Failed to capture photo")
