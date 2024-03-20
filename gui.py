@@ -14,10 +14,11 @@ import csv
 from bisect import bisect_left
 import subprocess
 import tkinter.filedialog as filedialog
+from datetime import datetime
 
 script_directory = os.path.dirname(os.path.abspath(__file__))
 settings_window = None
-__version__ = "0.4.2"
+__version__ = "0.4.4"
 
 
 def list_available_cameras():
@@ -41,7 +42,7 @@ def list_available_cameras():
     return cameras
 
 
-class LCGApp:
+class LCGApp():
     def __init__(self, root, camera_index, camera_list):
         self.approx_exposure = []
         self.approx_gain = []
@@ -50,6 +51,7 @@ class LCGApp:
         self.root.title(f"LCG: LEED Camera GUI v.{__version__}")
         self.root.geometry("1400x1020")
         self.root.maxsize(width=1920, height=1100)
+
 
         # self.last_saved_image_label.pack(side="right")
         # initialisation of all values
@@ -216,7 +218,7 @@ class LCGApp:
         frame_save_directory.pack()
         self.current_save_directory = tk.Label(frame_save_directory, text="Save Directory:")
         self.current_save_directory.pack(side=tk.LEFT)
-        self.save_directory = script_directory
+        self.save_directory =self.set_save_directory()
         self.save_directory_text = tk.Text(frame_save_directory, wrap=tk.WORD, height=1, width=25)
         self.save_directory_text.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.save_directory_text.insert(tk.END, self.save_directory)
@@ -446,7 +448,6 @@ class LCGApp:
 
     def lin_interpolate(self, x, x_list, y_list):
         i = bisect_left(x_list, x)
-
         if i == 0:
             return y_list[0]
         elif i == len(x_list):
@@ -460,12 +461,17 @@ class LCGApp:
         energy_values = []
         gain_values = []
         exposure_values = []
+        print(self.calibration_file)
         with open(self.calibration_file, newline='') as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
                 energy_values.append(float(row['Energy (eV)']))
                 gain_values.append(float(row['Gain']))
                 exposure_values.append(float(row['Exposure (s)']))
+        sorted_indexes=np.asarray(energy_values).argsort()
+        energy_values=np.asarray(energy_values)[sorted_indexes]
+        gain_values=np.asarray(gain_values)[sorted_indexes]
+        exposure_values=np.asarray(exposure_values)[sorted_indexes]
         min_energy = start
         max_energy = end
         num_points = int(length)
@@ -482,14 +488,18 @@ class LCGApp:
 
     def capture_energy_image(self, energy, end_energy, step):
         if energy <= end_energy:
+            current_date = datetime.now().strftime("%Y%m%d")
+            with open('config.toml', 'r') as f:
+                self.config = toml.load(f)
+                self.prefix = self.config['save_directory']['prefix']
 
             def capture_next():
                 self.capture_energy_image(energy + step, end_energy, step)
 
-            self.update_leed_states()
+            #self.update_leed_states()
             self.leed_device.send_energy(energy)
-            self.result_label.config(text=f"Result: {self.leed_device.read_energy()[-1]}")
-            self.output_leed.config(text=f"Result: {self.leed_device.read_energy()[-1]}")
+            #self.result_label.config(text=f"Result: {self.leed_device.read_energy()[-1]}")
+            #self.output_leed.config(text=f"Result: {self.leed_device.read_energy()[-1]}")
             self.camera.set(cv2.CAP_PROP_EXPOSURE, self.approx_exposure[self.capture_step] * 10000)
             self.camera.set(cv2.CAP_PROP_GAIN, self.approx_gain[self.capture_step])
             break_time = 1000 if self.camera.get(cv2.CAP_PROP_EXPOSURE) // 10 < 1000 else self.camera.get(
@@ -497,11 +507,16 @@ class LCGApp:
             self.root.after(int(5 * break_time))  # short break depending on camera exposure time (at least 5sec!)
             status, frame = self.camera.get_frame()
             if status:
-                file_path = self.save_directory + f'/EN_{energy}.png'
+                file_path = self.save_directory+'/'+ current_date +'_'+ str(self.prefix) +'_' + str(energy)+ '_eV.png' #f'/EN_{energy}.png'
                 # Save the captured frame as a PNG image in 16-bit format
                 cv2.imwrite(file_path, frame, [cv2.IMWRITE_PNG_COMPRESSION, 16])
                 print(f"Photo captured and saved as '{file_path}'")
-                self.display_last_saved_image(frame)
+
+                self.config['save_directory']['prefix'] = self.prefix + 1
+                with open('config.toml', 'w') as f:
+                    toml.dump(self.config, f)
+
+                #self.display_last_saved_image(frame)
             else:
                 print("Failed to capture photo")
             self.capture_step += 1
@@ -547,7 +562,7 @@ class LCGApp:
 
     def select_directory(self):
         # self.save_directory = filedialog.askdirectory()
-        dialog = CustomFolderDialog()
+        dialog = CustomFolderDialog(save_directory=self.save_directory)
         dialog.title("Select/Create New Folder")
         dialog.wait_window()
         if dialog.new_folder_path.get():  # If folder path is not empty
@@ -555,6 +570,27 @@ class LCGApp:
         self.save_directory_text.delete(1.0, tk.END)  # Clear existing text
         self.save_directory_text.insert(tk.END, self.save_directory)
         print("Save directory:", self.save_directory)
+
+    def set_save_directory(self):
+        with open('config.toml', 'r') as f:
+            config = toml.load(f)
+
+        if 'save_directory' in config and 'path' in config['save_directory']:
+            base_directory = config['save_directory']['path']
+        else:
+            # Set default base_directory to the directory of the script
+            base_directory = os.path.dirname(os.path.abspath(__file__))
+
+            # Create a subdirectory with the current date
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        save_directory = os.path.join(base_directory, current_date)
+
+        # Check if the subdirectory exists, otherwise create it
+        if not os.path.exists(save_directory):
+            os.makedirs(save_directory)
+
+        return save_directory
+
 
     def set_energy(self):
         energy = self.command_entry.get()
@@ -570,6 +606,8 @@ class LCGApp:
 
     def set_energy_leed(self):
         energy = self.command_energy_entry.get()
+
+
         try:
             energy_float = float(energy)
             self.update_leed_states()
@@ -582,9 +620,19 @@ class LCGApp:
 
     def capture_photo(self):
         status, frame = self.camera.get_frame()
+        current_date = datetime.now().strftime("%Y%m%d")
+        energy = self.command_entry.get()
+
+        with open('config.toml', 'r') as f:
+            self.config = toml.load(f)
+            self.prefix = self.config['save_directory']['prefix']
+
+
         if status:
             file_path = filedialog.asksaveasfilename(
                 defaultextension=".jpg",
+                initialdir=self.save_directory,
+                initialfile=current_date +'_'+ str(self.prefix) +'_' + energy+ '_eV',
                 filetypes=[
                     ("JPEG files", "*.jpg"),
                     ("PNG files", "*.png"),
@@ -595,6 +643,10 @@ class LCGApp:
             )
             if file_path:
                 file_extension = file_path.split('.')[-1].lower()
+                self.config['save_directory']['prefix'] = self.prefix + 1
+
+                with open('config.toml', 'w') as f:
+                    toml.dump(self.config, f)
 
                 if file_extension == 'png':
                     # Save as PNG with 16-bit depth
@@ -883,6 +935,8 @@ class LCGApp:
         self.command_energy_entry = tk.Entry(leed_energy_frame)
         self.command_energy_entry.pack(side=tk.LEFT)
 
+
+
         set_energy_button = tk.Button(leed_energy_frame, text="Set energy", command=self.set_energy_leed)
         set_energy_button.pack(side=tk.LEFT)
         leed_command_frame = tk.Frame(leed_test_frame)
@@ -892,6 +946,7 @@ class LCGApp:
 
         self.entry_test_command = tk.Entry(leed_command_frame)
         self.entry_test_command.pack(side=tk.LEFT)
+
 
         test_command_button = tk.Button(leed_command_frame, text="Send command", command=self.send_cmd_leed)
         test_command_button.pack(side=tk.LEFT)

@@ -1,15 +1,19 @@
 [CameraSettings]
 camera_index = 0
 initial_resolution = "2048x2048"
-brightness = 0.0
+brightness = 358.0
 gain_auto = false
-gain = 28.0
+gain = 36.0
 exposure_auto = false
 exposure_time = 1
 
 [LEEDSettings]
 server_host = "129.217.168.64"
 server_port = 4004
+
+[save_directory]
+path = "/home/lab/Desktop/LEED/"
+prefix = 1066
 
 [CameraSettings.resolutions]
 640x480 = [ 640, 480,]
