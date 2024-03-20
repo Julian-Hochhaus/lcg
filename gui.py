@@ -632,7 +632,7 @@ class LCGApp():
             file_path = filedialog.asksaveasfilename(
                 defaultextension=".jpg",
                 initialdir=self.save_directory,
-                initialfile=current_date +'_'+ str(self.prefix) +'_' + energy+ 'eV',
+                initialfile=current_date +'_'+ str(self.prefix) +'_' + energy+ '_eV',
                 filetypes=[
                     ("JPEG files", "*.jpg"),
                     ("PNG files", "*.png"),

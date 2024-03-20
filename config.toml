@@ -13,7 +13,7 @@ server_port = 4004
 
 [save_directory]
 path = "/home/lab/Desktop/LEED/"
-prefix = 1047
+prefix = 1066
 
 [CameraSettings.resolutions]
 640x480 = [ 640, 480,]
